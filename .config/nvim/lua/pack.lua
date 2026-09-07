@@ -57,7 +57,46 @@ require("mini.notify").setup({
         format = function(notif)
             return notif.msg
         end
+    },
+    window = {
+        -- Bottom right, sitting directly on top of the statusline. Derived from
+        -- the options rather than hardcoded, so turning the statusline off or
+        -- giving the cmdline height back keeps the window off both of them.
+        --
+        -- Borderless, so the message is bare text over the buffer. The empty
+        -- title is belt and braces: a border is what hosts a title, so dropping
+        -- the border already hides mini.notify's " Notifications " caption --
+        -- but the caption is force-set on every open and merged with
+        -- tbl_deep_extend('force', ...), where a nil is an absent key rather
+        -- than an erasure, so it can only ever be overridden by a value.
+        config = function()
+            local has_statusline = vim.o.laststatus > 0
+            local pad = vim.o.cmdheight + (has_statusline and 1 or 0)
+            return {
+                anchor = "SE",
+                col = vim.o.columns,
+                row = vim.o.lines - pad,
+                border = "none",
+                title = ""
+            }
+        end,
+
+        -- Notifications are the one float with no surface (zenon.lua gives
+        -- MiniNotifyNormal bg=NONE), so mini.notify's default winblend of 25
+        -- has nothing to blend but the buffer text underneath, which would show
+        -- through the message. 0 keeps the text it is reporting on legible.
+        winblend = 0
     }
+})
+
+-- setup() already pointed vim.notify here, but its INFO level paints the text
+-- DiagnosticInfo -- the message colour comes from a per-notification extmark,
+-- not from MiniNotifyNormal, so recolouring that group alone would not touch
+-- it. Route INFO through MiniNotifyNormal (zenon yellow) and leave ERROR and
+-- WARN on their diagnostic colours, which is the whole signal fzf.lua's
+-- failure notifications rely on.
+vim.notify = require("mini.notify").make_notify({
+    INFO = { hl_group = "MiniNotifyNormal" }
 })
 
 require("mini.completion").setup({

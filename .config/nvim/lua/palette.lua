@@ -6,6 +6,17 @@
 -- Single source of truth for the zenon palette
 return {
   black           = "#000000",
+
+  -- Surface colour for every overlay (floats, which-key, yazi, fzf). Reads as
+  -- black, but is deliberately one step off it: kitty decides translucency by
+  -- comparing a cell's background against the *value* of the default one --
+  -- cell_vertex.glsl's background_opacity_for() is "opacity if bg == colorval
+  -- else 1", with slot 0 holding the default bg. zenon.conf sets that default
+  -- to #000000, so a literal-black overlay matches and inherits kitty's 0.80
+  -- alpha no matter how explicitly nvim paints it. #010101 misses the compare
+  -- and renders fully opaque.
+  layer           = "#010101",
+
   lblack          = "#20242a",
   red             = "#e78284",
   green           = "#b6e0a4",

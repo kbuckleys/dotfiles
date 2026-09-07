@@ -43,21 +43,34 @@ vim.api.nvim_set_hl(0, "Normal", { bg = "NONE" })
 vim.api.nvim_set_hl(0, "WinSeparator", { fg = p.lblack, bg = p.lblack })
 
 -- Layers (floats, leader menu, Yazi, fzf, LSP hovers, notifications) all sit on
--- one opaque black surface ringed in light black. Normal stays transparent, so
--- anything mapping a float onto Normal instead of NormalFloat shows through.
-local layer        = { fg = p.white, bg = p.black }
-local layer_border = { fg = p.lblack, bg = p.black }
+-- one opaque surface ringed in light black. The surface is p.layer, not p.black
+-- -- see palette.lua for why literal black cannot be opaque under kitty.
+-- Normal stays transparent, so anything mapping a float onto Normal instead of
+-- NormalFloat shows through. Terminal buffers resolve their default-background
+-- cells against NormalFloat too, which is what puts Yazi and fzf on the surface
+-- without either having to paint a background of its own.
+local layer        = { fg = p.white, bg = p.layer }
+local layer_border = { fg = p.lblack, bg = p.layer }
 
 for group, hl in pairs({
   NormalFloat     = layer,
   FloatBorder     = layer_border,
-  FloatTitle      = { fg = p.green, bg = p.black },
-  FloatFooter     = { fg = p.bright_black, bg = p.black },
+  FloatTitle      = { fg = p.green, bg = p.layer },
+  FloatFooter     = { fg = p.bright_black, bg = p.layer },
 
   -- which-key and yazi.nvim remap the float onto groups of their own
   WhichKeyNormal  = layer,
   YaziFloat       = layer,
   YaziFloatBorder = layer_border,
+
+  -- Notifications are the exception to the surface: transient, borderless and
+  -- sitting over live text, so they are bare yellow on Normal's transparency.
+  -- mini.notify links this to NormalFloat with `default = true`, which setting
+  -- it here overrides -- and keeps overriding, since its ColorScheme handler
+  -- re-links with that flag. MiniNotifyBorder and MiniNotifyTitle are left
+  -- alone: nothing renders them once the window is borderless, and the history
+  -- window that mini.notify also owns is a plain window, not a float.
+  MiniNotifyNormal = { fg = p.yellow, bg = "NONE" },
 }) do
   vim.api.nvim_set_hl(0, group, hl)
 end

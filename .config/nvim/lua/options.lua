@@ -67,7 +67,6 @@ if ok_ui2 then
     msg = {
       targets = {
         [''] = 'msg',
-        bufwrite = 'msg',
         echo = 'msg',
         echomsg = 'msg'
       },
@@ -76,7 +75,36 @@ if ok_ui2 then
       }
     }
   })
+
+  -- Keep the write report ('"init.lua" 11L, 214B written') out of the message
+  -- window; a BufWritePost notification below says the same thing without
+  -- parking it over the statusline. A target cannot express this -- the three
+  -- targets are all *places to render*, none of them a sink that drops -- so
+  -- the message is intercepted at the routing function instead. Same private
+  -- API and the same pcall reasoning as ui2 itself.
+  --
+  -- 'progress' is the whole of what nvim 0.12 folded the old 'bufwrite' and
+  -- 'completion' kinds into (see :h news.txt), and 'shortmess' already carries
+  -- c to silence the completion half, so this only ever swallows writes. Write
+  -- *failures* arrive as 'emsg' and are untouched.
+  local ok_msgs, msgs = pcall(require, 'vim._core.ui2.messages')
+  if ok_msgs then
+    local msg_show = msgs.msg_show
+    msgs.msg_show = function(kind, ...)
+      if kind == 'progress' then
+        return
+      end
+      return msg_show(kind, ...)
+    end
+  end
 end
+
+vim.api.nvim_create_autocmd("BufWritePost", {
+  desc = "Report a write as a notification rather than a message",
+  callback = function(ev)
+    vim.notify(vim.fn.fnamemodify(ev.file, ":~:.") .. " written")
+  end
+})
 
 -- Highlight yanked text
 vim.api.nvim_create_autocmd("TextYankPost", {

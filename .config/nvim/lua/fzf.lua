@@ -12,14 +12,17 @@ local term_colors = require("palette")
 -- Map the float onto NormalFloat, not Normal: Normal is transparent
 local float_winhl = "Normal:NormalFloat,NormalFloat:NormalFloat"
 
+-- fzf paints its own background rather than leaving cells at the terminal
+-- default, so the surface has to be named here as well as in zenon.lua -- and
+-- with the same off-black, for the reason palette.lua's `layer` documents.
 local function build_fzf_colors()
   return table.concat({
     "fg:"          .. term_colors.white,
-    "bg:"          .. term_colors.black,
+    "bg:"          .. term_colors.layer,
     "fg+:"         .. term_colors.green,
-    "bg+:"         .. term_colors.black,
-    "gutter:"      .. term_colors.black,
-    "preview-bg:"  .. term_colors.black,
+    "bg+:"         .. term_colors.layer,
+    "gutter:"      .. term_colors.layer,
+    "preview-bg:"  .. term_colors.layer,
     "hl:"          .. term_colors.yellow,
     "hl+:"         .. term_colors.yellow,
     "prompt:"      .. term_colors.green,
