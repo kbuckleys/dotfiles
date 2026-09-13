@@ -7,6 +7,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "helpers.js" as Helpers
+import "../oracle"
 import "."
 
 // Privacy/status indicators. Each icon owns its own slot and eases away when
@@ -18,7 +19,8 @@ Collapsible {
   property bool screenActive: false
   property bool recording: false
 
-  active: root.micActive || root.screenActive || root.recording
+  active: Oracle.showStatus
+    && (root.micActive || root.screenActive || root.recording)
   openWidth: row.implicitWidth
 
   Row {
@@ -93,7 +95,10 @@ Collapsible {
   Timer {
     id: poll
     interval: 2000
-    running: true
+    // Switched off in oracle there is nothing to report, and this is a
+    // subprocess every two seconds for the rest of the session — the one
+    // module switch that is worth more than the pixels it saves.
+    running: Oracle.showStatus
     repeat: true
     onTriggered: {
       if (!proc.running) proc.running = true;

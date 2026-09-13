@@ -16,13 +16,21 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../oracle"
 
 Singleton {
   id: root
 
   // ── the shape ────────────────────────────────────────────────────────
   // One duration, since the pill and the wallpaper are one movement.
-  readonly property int duration: 750
+  //
+  // Zero when the arrival is off, and that is the whole of turning it off:
+  // both callers animate a 0->1 property through a Behavior, and a Behavior
+  // with a zero duration puts the value there on the frame it is asked for.
+  // Nothing has to know whether it is enabled; it simply lands.
+  readonly property int duration: Oracle.arrivalEnabled ? Oracle.arrivalDuration : 0
+
+  readonly property bool enabled: Oracle.arrivalEnabled
 
   // ── the schedule ─────────────────────────────────────────────────────
   // A DEADLINE, NOT A DELAY. This is the single thing the previous version
@@ -52,7 +60,7 @@ Singleton {
   //
   // So the visible threshold is somewhere above 1515 and at or below 2135, and
   // this sits just past it. Deterministic, unlike the 2135-2518 it replaces.
-  readonly property int onScreenBy: 2200
+  readonly property int onScreenBy: Oracle.arrivalDeadline
 
   // Past this, the process has plainly been on screen a while — a config
   // reload or an unlock — and the arrival plays immediately.
@@ -71,6 +79,10 @@ Singleton {
   // so the pill and the wallpaper arming at different instants still aim at
   // the same moment rather than drifting apart.
   function delay() {
+    // Turned off, there is nothing to wait for: the shortest interval a Timer
+    // will honour, so the value lands on the frame after the window exists and
+    // the Behavior — running at duration 0 — puts it there without a slide.
+    if (!root.enabled) return 1;
     const a = root.age();
     if (a >= root.coldWindow) return root.warmDelay;
     return Math.max(root.warmDelay, root.onScreenBy - a);

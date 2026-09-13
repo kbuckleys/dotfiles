@@ -20,7 +20,7 @@ Text {
 
   text: key.glyph
   color: key.ink
-  font.family: "JetBrainsMono Nerd Font Propo"
+  font.family: Zenon.face
   font.weight: Font.Bold
   font.pixelSize: key.size
   // dim until pointed at, so a row of three reads as three targets rather

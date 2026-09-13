@@ -104,10 +104,43 @@ Scope {
   // must not count a dialog as your last file manager.
   property var pickerWin: null
 
+  // WHERE YOU LAST SAVED SOMETHING, held HERE rather than on the dialog.
+  //
+  // The dialog is destroyed the moment it answers, and the preference write
+  // behind it is debounced — so a value recorded on the window went to the
+  // grave with it every single time, and the next save opened wherever the
+  // asking program suggested all over again. The manager outlives every
+  // picker, which is the whole reason it is the one holding this.
+  property string lastSaveDir: ""
+
+  // Recorded, and asked to be written down. Window 0 owns the preferences
+  // file; a dialog has no business writing it and will not be alive to.
+  function noteSaveDir(d) {
+    if (!d || d === "") return;
+    mgr.lastSaveDir = d;
+    const w = mgr.win();
+    if (w) w.persistPrefs();
+  }
+
   function picker() {
-    if (mgr.pickerWin) return mgr.pickerWin;
-    // winId -1 so `q` inside it takes the "not window 0" branch and asks to be
-    // retired rather than merely hiding a dialog nothing can reach again
+    // A DEAD POINTER IS NOT A WINDOW. The dialog can go away by routes this
+    // manager never hears about — the compositor closing it, a destroy that
+    // raced a new request — and a destroyed QObject held in a `var` does not
+    // become null, it simply throws the moment anything is read off it. So the
+    // stale pointer was handed the next request, setting `portal` on it threw,
+    // the portal was never answered and never will be, and no dialog could be
+    // opened again for the life of the shell.
+    //
+    // Reading one property is the only way to ask "are you still there".
+    if (mgr.pickerWin) {
+      try {
+        if (mgr.pickerWin.winId === -1) return mgr.pickerWin;
+      } catch (e) {
+        // fall through and build a fresh one
+      }
+      mgr.pickerWin = null;
+    }
+    // winId -1 so the window knows it is a dialog rather than a file manager
     mgr.pickerWin = winComp.createObject(mgr, { winId: -1, mgr: mgr });
     return mgr.pickerWin;
   }
@@ -303,6 +336,11 @@ Scope {
 
         const w = mgr.picker();
         if (!w) return "no window";
+        // WHERE YOU LAST SAVED beats where the program suggests — see
+        // lastSaveDir in the window. The NAME still comes from the request:
+        // the program knows what the file should be called, it just has no
+        // idea where you keep things.
+        if (saving && mgr.lastSaveDir !== "") start = mgr.lastSaveDir;
         w.portal = {
           multiple: multiple === "1",
           directory: directory === "1",
@@ -311,7 +349,7 @@ Scope {
         };
         w.goTo(start === "" ? Paths.home() : start);
         w.setSaveName(suggested);
-        w.viewMode = "columns";
+        w.setView("columns");
         // and one pane: a dialog picks a file, it does not move files about
         w.dual = false;
         w.shown = true;
@@ -326,7 +364,7 @@ Scope {
       function view(mode: string): string {
         const w = mgr.win();
         if (!w) return "no window";
-        if (w.viewRing.indexOf(mode) >= 0) w.viewMode = mode;
+        w.setView(mode);
         return w.viewMode;
       }
     }

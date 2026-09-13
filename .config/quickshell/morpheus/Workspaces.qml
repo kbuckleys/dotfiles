@@ -7,6 +7,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Services.SystemTray
+import "../oracle"
 import "."
 
 Item {
@@ -62,7 +63,10 @@ Item {
     }
     return out;
   }
-  property bool hasTray: trayItems.length > 0
+  // Switched off in oracle the row simply never has a tray to reveal, which is
+  // a state it already knows how to be in — the crossfade below is the one it
+  // runs whenever the last tray application quits.
+  property bool hasTray: Oracle.showTray && trayItems.length > 0
   property bool hovered: false
   property bool menuOpen: false
 
@@ -255,7 +259,7 @@ Item {
               if (mouse.button === Qt.LeftButton) modelData.activate()
               else if (modelData.hasMenu) {
                 root.menuOpen = true
-                trayMenu.open()
+                trayMenu.show()
               }
               else modelData.secondaryActivate()
             }

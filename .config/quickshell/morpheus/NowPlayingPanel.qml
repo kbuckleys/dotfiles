@@ -55,7 +55,7 @@ CursorAnchor {
     implicitHeight: layout.height + 22
     opacity: panel.showFactor
     color: Zenon.panelBg
-    border.color: Zenon.surface
+    border.color: Zenon.surfaceBorder
     border.width: 1
     radius: 6
 
@@ -124,7 +124,7 @@ CursorAnchor {
             visible: art.status !== Image.Ready
             text: ""
             color: Zenon.muted
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.pixelSize: 26
           }
         }
@@ -141,7 +141,7 @@ CursorAnchor {
             text: NowPlaying.title
             visible: text !== ""
             color: Zenon.green
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.weight: Font.Bold
             font.pixelSize: 16
             wrapMode: Text.Wrap
@@ -153,7 +153,7 @@ CursorAnchor {
             text: NowPlaying.artist
             visible: text !== ""
             color: Zenon.white
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.pixelSize: 15
             wrapMode: Text.Wrap
           }
@@ -164,7 +164,7 @@ CursorAnchor {
             text: NowPlaying.album
             visible: text !== ""
             color: Zenon.muted
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.pixelSize: 15
             wrapMode: Text.Wrap
           }
@@ -214,7 +214,7 @@ CursorAnchor {
           anchors.verticalCenter: parent.verticalCenter
           text: NowPlaying.formatTime(seekBar.dragging ? seekBar.dragFrac * NowPlaying.length : NowPlaying.position)
           color: Zenon.muted
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.pixelSize: 11
           width: 34
           horizontalAlignment: Text.AlignRight
@@ -285,7 +285,7 @@ CursorAnchor {
           anchors.verticalCenter: parent.verticalCenter
           text: NowPlaying.formatTime(NowPlaying.length)
           color: Zenon.muted
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.pixelSize: 11
           width: 34
           horizontalAlignment: Text.AlignLeft
@@ -309,7 +309,7 @@ CursorAnchor {
           anchors.verticalCenter: parent.verticalCenter
           text: Volume.muted ? "" : ""
           color: Volume.muted ? Zenon.red : Zenon.green
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.weight: Font.Bold
           font.pixelSize: 16
         }
@@ -331,7 +331,7 @@ CursorAnchor {
           horizontalAlignment: Text.AlignRight
           text: Volume.muted ? "muted" : Volume.percent + "%"
           color: Volume.muted ? Zenon.red : Zenon.white
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.weight: Font.Bold
           font.pixelSize: 15
         }

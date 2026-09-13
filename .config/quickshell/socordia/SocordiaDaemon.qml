@@ -20,6 +20,7 @@ import Quickshell.Hyprland
 import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import "../morpheus"
+import "../oracle"
 
 Scope {
   id: root
@@ -52,8 +53,9 @@ Scope {
   //
   // Deliberately does not try to tell video from music: nothing in mpris
   // metadata reliably says which is which, and being locked out mid-album is
-  // the same annoyance. Set this false to let the timers run for audio-only.
-  readonly property bool inhibitOnPlayback: true
+  // the same annoyance. Turn it off in oracle to let the timers run for
+  // audio-only.
+  readonly property bool inhibitOnPlayback: Oracle.idleInhibitPlayback
 
   // Any MPRIS player currently reporting Playing — read live rather than via
   // NowPlaying's 1s timer so the idle monitors react on the next frame after
@@ -142,30 +144,45 @@ Scope {
   }
 
   // ── hypridle.conf: listeners ─────────────────────────────────────────
-  // Ported one-for-one. `on-resume` of null means the listener had none.
-  readonly property var listeners: [
+  // Ported one-for-one, and now built rather than written: each timeout is a
+  // setting, and a listener whose timeout is zero is LEFT OUT of the list
+  // entirely rather than created with a timeout of zero — which
+  // ext-idle-notify would read as "idle immediately", locking the screen the
+  // moment the setting was saved. Zero means "never", and the only honest way
+  // to say never is not to be there.
+  //
+  // `on-resume` of null means the listener had none.
+  readonly property var listeners: {
+    if (!Oracle.idleEnabled) return [];
+    const out = [];
     //   listener { timeout = 300; on-timeout = <lock> }
-    {
-      timeout: 300,
+    if (Oracle.idleLockSecs > 0) out.push({
+      timeout: Oracle.idleLockSecs,
       onTimeout: () => root.lock(),
       onResume: null
-    },
+    });
     //   listener { timeout = 300
     //              on-timeout = solaar config "G515 TKL" brightness_control 0
     //              on-resume  = solaar config "G515 TKL" brightness_control 100 }
-    {
-      timeout: 300,
-      onTimeout: () => root.run(["solaar", "config", "G515 TKL", "brightness_control", "0"]),
-      onResume: () => root.run(["solaar", "config", "G515 TKL", "brightness_control", "100"])
-    },
+    //
+    // The keyboard is named in oracle: no such keyboard is the common case on
+    // any machine but this one, and a solaar that is not installed fails once
+    // every five minutes for the life of the session. Empty name, no listener.
+    const kbd = String(Oracle.idleKeyboardName || "").trim();
+    if (kbd !== "" && Oracle.idleKeyboardSecs > 0) out.push({
+      timeout: Oracle.idleKeyboardSecs,
+      onTimeout: () => root.run(["solaar", "config", kbd, "brightness_control", "0"]),
+      onResume: () => root.run(["solaar", "config", kbd, "brightness_control", "100"])
+    });
     //   listener { timeout = 600
     //              on-timeout = dpms disable / on-resume = dpms enable }
-    {
-      timeout: 600,
+    if (Oracle.idleScreenOffSecs > 0) out.push({
+      timeout: Oracle.idleScreenOffSecs,
       onTimeout: () => root.dpms(false),
       onResume: () => root.dpms(true)
-    }
-  ]
+    });
+    return out;
+  }
 
   // argv, not a shell string: nothing here needs a shell, and "G515 TKL" has
   // a space in it that quoting kept getting wrong on the way through one.

@@ -11,12 +11,13 @@
 // a halo did.
 
 import QtQuick
+import "../oracle"
 import "."
 
 Collapsible {
   id: root
 
-  active: NowPlaying.active && NowPlaying.title !== ""
+  active: Oracle.showNowPlaying && NowPlaying.active && NowPlaying.title !== ""
   openWidth: row.implicitWidth
 
   Row {

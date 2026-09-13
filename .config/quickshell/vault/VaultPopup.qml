@@ -56,7 +56,7 @@ PanelWindow {
   property var statusbar: null
 
   readonly property color bgColor: Zenon.layerBg
-  readonly property color borderColor: Zenon.surface
+  readonly property color borderColor: Zenon.surfaceBorder
   readonly property color fgColor: Zenon.white
   readonly property color headColor: Zenon.cyan
   readonly property color keyColor: Zenon.keyInk
@@ -554,7 +554,7 @@ PanelWindow {
             Strings.escapeHtml(modelData[0]) + "</span></b> <b><span style=\"color:" +
             popup.dimColor + ";\">" + Strings.escapeHtml(modelData[1]) + "</span></b>"
           textFormat: Text.RichText
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.pixelSize: 13
         }
       }
@@ -586,20 +586,26 @@ PanelWindow {
 
   Item {
     id: panel
-    width: 1000
+    width: Zenon.layerWidth(1000)
     height: popup.calcHeight()
     // Zenon.slow is the pill's own height easing in shell.qml
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -674,7 +680,7 @@ PanelWindow {
                 text: "\uF023"
                 color: popup.headColor
                 anchors.verticalCenter: parent.verticalCenter
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 17
               }
@@ -690,7 +696,7 @@ PanelWindow {
                   color: popup.entryColor
                   selectionColor: popup.errColor
                   selectedTextColor: "#000000"
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: 500
                   font.pixelSize: 17
                   cursorVisible: activeFocus
@@ -736,7 +742,7 @@ PanelWindow {
               visible: popup.filtered.length === 0
               text: "No matches found"
               color: popup.dimColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 600
               font.pixelSize: 15
             }
@@ -785,7 +791,7 @@ PanelWindow {
                 color: index === popup.sel ? popup.entryColor : popup.fgColor
                 textFormat: Text.RichText
                 elide: Text.ElideRight
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.pixelSize: 16
               }
 
@@ -823,7 +829,7 @@ PanelWindow {
                 text: popup.filtered.length + " Credentials"
                 color: popup.headColor
                 font.bold: true
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 16
               }
@@ -867,7 +873,7 @@ PanelWindow {
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth + 8, popup.width - 60)
                 horizontalAlignment: Text.AlignHCenter
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 700
                 font.pixelSize: 17
               }
@@ -880,7 +886,7 @@ PanelWindow {
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth + 8, popup.width - 80)
                 horizontalAlignment: Text.AlignHCenter
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.pixelSize: 14
               }
             }
@@ -913,7 +919,7 @@ PanelWindow {
                   color: popup.actionSel === index
                     ? popup.entryColor : popup.dimColor
                   font.bold: popup.actionSel === index
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.pixelSize: 14
                 }
 
@@ -958,7 +964,7 @@ PanelWindow {
               text: popup.errorMsg
               color: "#000000"
               font.bold: true
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 700
               font.pixelSize: 16
             }
@@ -970,7 +976,7 @@ PanelWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "press esc to go back"
             color: popup.dimColor
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.pixelSize: 14
           }
         }
@@ -1007,7 +1013,7 @@ PanelWindow {
               // it disappears, so the ink becomes the accent itself
               color: popup.errColor
               font.bold: true
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 700
               font.pixelSize: 15
             }
@@ -1030,7 +1036,7 @@ PanelWindow {
               visible: !popup.emailSet
               text: "no account set \u2014 run:  rbw config set email <you>"
               color: popup.dimColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.pixelSize: 14
             }
 
@@ -1090,7 +1096,7 @@ PanelWindow {
                     text: "\uF456"
                     color: popup.phase === "input" || popup.phase === "fail"
                       ? popup.errColor : popup.dimColor
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     // Bound to the message beside it rather than set to a
                     // number, so the two cannot drift apart later
                     font.pixelSize: fieldMsg.font.pixelSize
@@ -1135,7 +1141,7 @@ PanelWindow {
                     : popup.phase === "success" ? "unlocked"
                     : "input your master password"
                   color: popup.phase === "fail" ? popup.errColor : popup.dimColor
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.pixelSize: 14
                 }
 
@@ -1149,7 +1155,7 @@ PanelWindow {
                     // pair a QML string literal needs
                     text: "\uDB82\uDDDE"
                     color: popup.entryColor
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.pixelSize: 15
                   }
                 }

@@ -74,3 +74,32 @@ function parse(text) {
     return {};
   }
 }
+
+// ── the whole of picasso's state ──────────────────────────────────────────
+// Two maps now, both keyed by monitor name: which image is on it, and how
+// that image is fitted to it. Fit used to be one global setting, which is
+// wrong the moment two monitors are different shapes — the exact case picasso
+// already handled for the image itself.
+//
+// THE OLD FILE IS A BARE MAP of monitor to path, with no wrapper at all. It
+// has to keep loading, and a version marker is the only honest way to tell
+// the two apart: a monitor cannot be called "v", but it could in principle be
+// called "assignment", and a format that guesses from a key name is a format
+// that corrupts somebody's config the day they buy that monitor.
+function serializeState(assignment, fits) {
+  return JSON.stringify({ v: 2, assignment: assignment || {}, fits: fits || {} });
+}
+
+function parseState(text) {
+  const j = parse(text);
+  if (j.v === 2) {
+    return {
+      assignment: (j.assignment && typeof j.assignment === "object"
+                   && !Array.isArray(j.assignment)) ? j.assignment : {},
+      fits: (j.fits && typeof j.fits === "object"
+             && !Array.isArray(j.fits)) ? j.fits : {}
+    };
+  }
+  // version 1: the object IS the assignment, and nothing had a fit of its own
+  return { assignment: j, fits: {} };
+}

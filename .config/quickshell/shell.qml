@@ -27,6 +27,7 @@ import "picasso"
 import "chronos"
 import "icarus"
 import "terminus"
+import "oracle"
 
 ShellRoot {
   id: root
@@ -70,15 +71,44 @@ ShellRoot {
   HowlerPopup { id: howler; statusbar: bar; screen: root.focusedScreen; morphMode: root.morphedFor("howler") && root.morphOnPill; morphFade: root.layerFade }
   PicassoPopup { id: picasso; statusbar: bar; screen: root.focusedScreen; morphMode: root.morphedFor("picasso") && root.morphOnPill; morphFade: root.layerFade }
   ChronosPopup { id: chronos; statusbar: bar; screen: root.focusedScreen; morphMode: root.morphedFor("chronos") && root.morphOnPill; morphFade: root.layerFade }
+  // The settings, for every layer above it and for the pill itself.
+  //
+  // NOT IN THE MORPH RING, and the only layer that is not — so it is absent
+  // from the width switch, the height switch and the Connections below, all of
+  // which are about a pill wearing a layer's shape. Half the controls in here
+  // move the pill while you hold them; a panel that WAS the pill would have
+  // been resizing itself under the pointer on every one of them. It stands
+  // free in the middle of the screen instead, and can be dragged off it.
+  // `screen`: like zeus, it picks its monitor when it opens and keeps it —
+  // see homeScreen there. A panel you have dragged into place must not
+  // follow your eyes to the other screen.
+  OraclePopup { id: oracle; liveScreen: root.focusedScreen; screen: oracle.homeScreen ? oracle.homeScreen : root.focusedScreen }
 
-  property var statusScreen: (function() {
-    const target = Quickshell.env("QS_STATUS_SCREEN") || "HDMI-A-1";
+  // Which monitor the pill lives on. A BINDING now, not a function called
+  // once: the name is a setting, and the point of it being a setting is that
+  // it can change while the shell is running. Written out as an IIFE it was
+  // evaluated at load and never again, so oracle could set it and nothing
+  // would move until a restart.
+  //
+  // Oracle first, then the environment variable that used to be the only
+  // answer, then whatever screen there is — the same order, with one door
+  // added in front.
+  readonly property var statusScreen: {
     const screens = Quickshell.screens;
-    for (let i = 0; i < screens.length; ++i) {
-      if (screens[i].name === target) return screens[i];
+    // Oracle, then the environment variable that used to be the only answer,
+    // and then nothing — NOT a monitor name written into the source. The old
+    // fallback was "HDMI-A-1", which is one desk's output: on any machine
+    // without it the loop below matched nothing and fell through to the first
+    // screen anyway, so the name was doing no work except to look like a
+    // decision somebody had made for you.
+    const target = Oracle.barMonitor !== "" ? Oracle.barMonitor
+      : Quickshell.env("QS_STATUS_SCREEN");
+    if (target) {
+      for (let i = 0; i < screens.length; ++i)
+        if (screens[i].name === target) return screens[i];
     }
     return screens.length ? screens[0] : null;
-  })()
+  }
 
   property string activeLayer: ""
   property bool layerOpen: activeLayer !== ""
@@ -304,30 +334,34 @@ ShellRoot {
 
   // dynamic pill width, max 1000, each layer retains own width
   property int morpheusContentWidth: barLayout ? barLayout.implicitWidth + 24 : 800
-  property int barWidthCollapsed: Math.min(1000, morpheusContentWidth)
+  property int barWidthCollapsed: Zenon.layerWidth(morpheusContentWidth)
   property int barWidthExpanded: {
     if (!layerOpen) return barWidthCollapsed;
     try {
       // follow cynosure's shrink-wrapped width exactly rather than freezing
       // the pill at the collapsed morpheus width; the 8px floor is only a guard
       // against a degenerate zero-width pill, never visible padding
+      // Every width here goes through Zenon.layerWidth, and so does the
+      // layer's OWN panel — the two are the same call with the same argument,
+      // which is what stops the pill and the layer inside it from disagreeing
+      // about how wide 1000 currently means. See Zenon.layerMax.
       if (activeLayer === "cynosure" && cynosure && cynosure.contentWidth)
-        return Math.min(1000, Math.max(8, cynosure.contentWidth))
-      if (activeLayer === "folio") return 1000
-      if (activeLayer === "erebus") return 250
-      if (activeLayer === "artemis") return artemis.panelWidth
-      if (activeLayer === "lexi") return (lexi && lexi.wide) ? 1000 : 800
-      if (activeLayer === "zeus") return 1000
-      if (activeLayer === "ideo") return 1000
-      if (activeLayer === "vault") return 1000
-      if (activeLayer === "adder") return 600
-      if (activeLayer === "howler") return 800
-      if (activeLayer === "picasso") return 1000
+        return Zenon.layerWidth(Math.max(8, cynosure.contentWidth))
+      if (activeLayer === "folio") return Zenon.layerWidth(1000)
+      if (activeLayer === "erebus") return Zenon.layerWidth(250)
+      if (activeLayer === "artemis") return Zenon.layerWidth(artemis.panelWidth)
+      if (activeLayer === "lexi") return Zenon.layerWidth((lexi && lexi.wide) ? 1000 : 800)
+      if (activeLayer === "zeus") return Zenon.layerWidth(1000)
+      if (activeLayer === "ideo") return Zenon.layerWidth(1000)
+      if (activeLayer === "vault") return Zenon.layerWidth(1000)
+      if (activeLayer === "adder") return Zenon.layerWidth(600)
+      if (activeLayer === "howler") return Zenon.layerWidth(800)
+      if (activeLayer === "picasso") return Zenon.layerWidth(1000)
       // chronos is sized by its calendar grid, not stretched to the usual max
       if (activeLayer === "chronos" && chronos && chronos.panelWidth)
-        return Math.min(1000, chronos.panelWidth)
+        return Zenon.layerWidth(chronos.panelWidth)
     } catch (e) {}
-    return 1000
+    return Zenon.layerWidth(1000)
   }
   property int currentBarWidth: pillMorphed ? barWidthExpanded : barWidthCollapsed
   // the pill is exactly one slot tall
@@ -349,6 +383,34 @@ ShellRoot {
       if (activeLayer === "chronos" && chronos && chronos.calcHeight) return chronos.calcHeight()
     } catch (e) {}
     return 320
+  }
+
+  // ── WHAT THE PILL IS CARRYING ─────────────────────────────────────────
+  // Each module switch is honoured where the module itself decides whether it
+  // has anything to say — a Collapsible's `active`, or a plain `visible` on
+  // the ones that are ordinary Items. A RowLayout leaves an invisible child
+  // out of the layout entirely, so switching one off is the same motion the
+  // module already makes when it goes quiet: the pill shrink-wraps.
+  //
+  // The SPACERS are the part that cannot be written per-module. A Gap between
+  // two meters should only be there when there is something on each side of
+  // it, and which sides those are changes with every switch. So the run is
+  // written down once, in layout order, and each gap asks about its own
+  // position in it rather than restating the list five times over.
+  readonly property var meterRun: [
+    Oracle.showNetwork, Oracle.showGpu, Oracle.showCpu,
+    Oracle.showMemory, root.audioShown
+  ]
+  readonly property bool audioShown: Oracle.showVolume || Oracle.showNowPlaying
+  readonly property bool metersShown: root.meterRun.indexOf(true) >= 0
+
+  // the gap that FOLLOWS item i of the run
+  function meterGap(i) {
+    let before = false;
+    let after = false;
+    for (let k = 0; k <= i; ++k) before = before || root.meterRun[k];
+    for (let k = i + 1; k < root.meterRun.length; ++k) after = after || root.meterRun[k];
+    return before && after;
   }
 
   // The bell's hover text: the most recent few, newest first. Built here
@@ -462,7 +524,11 @@ ShellRoot {
 
   PanelWindow {
       id: bar
-      anchors { left: true; right: true; bottom: true }
+      // Either edge. Both margins are set below regardless, so the one that
+      // is not anchored is simply ignored rather than needing a condition of
+      // its own.
+      anchors { left: true; right: true
+                bottom: !Zenon.barTop; top: Zenon.barTop }
       implicitHeight: bg.height
       screen: root.statusScreen
       // The reserved strip never changes size. Auto followed the pill's live
@@ -470,8 +536,19 @@ ShellRoot {
       // — either way every tiled window on this monitor resized the moment a
       // layer opened. Pinned to the collapsed pill instead, so the desktop
       // underneath stays exactly where it is whatever the pill is doing.
-      exclusionMode: ExclusionMode.Normal
+      // Ignore releases the reservation altogether, so the pill floats over
+      // tiled windows instead of pushing them up. Still pinned to the
+      // COLLAPSED height when it is on: see above — following the live height
+      // resized every window on the monitor each time a layer opened.
+      exclusionMode: Oracle.barReserveSpace
+        ? ExclusionMode.Normal : ExclusionMode.Ignore
+      // The pill's own height, the gap it keeps under itself, and then
+      // whatever is asked for OVER it. The first two are where the pill
+      // physically is; the third is empty space nothing draws in, which is
+      // the only way to hold a tiled window off a bar that is already as tall
+      // as it is going to get.
       exclusiveZone: root.barHeightCollapsed + Zenon.padScreen
+        + Oracle.barWindowGap
       color: "transparent"
       // always centred on its screen — collapsed or morphed
       readonly property int sideMargin: Math.max(0,
@@ -505,13 +582,18 @@ ShellRoot {
       width: parent.width
       height: root.pillMorphed ? root.barHeightExpanded : root.barHeightCollapsed
       color: Zenon.panelBg
-      border.color: Zenon.surface
+      border.color: Zenon.surfaceBorder
       border.width: 1
       // single uniform radius so all four corners stay even during morph
       radius: root.pillRadius
       clip: true
       opacity: root.barIntro
-      transform: Translate { y: (1 - root.barIntro) * 22 }
+      // Rises INTO the screen from whichever edge it lives on: up from below
+      // at the bottom, down from above at the top. A pill at the top that
+      // still slid upwards would arrive by leaving.
+      transform: Translate {
+        y: (Zenon.barTop ? -1 : 1) * (1 - root.barIntro) * 22
+      }
       Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
 
       // The now-playing takeover. Drawn at pill level and not inside the
@@ -583,8 +665,10 @@ ShellRoot {
       readonly property real specialW: bg.leftHasContent ? workspacesMod.width + Zenon.gap * 2 : Zenon.padBar + workspacesMod.x + workspacesMod.width + Zenon.gap - bg.border.width
       Rectangle {
         id: specialTakeover
-        visible: workspacesMod.specialWorkspace !== null && opacity > 0.01
-        opacity: root.pillRowFade * (workspacesMod.specialWorkspace !== null ? 1 : 0)
+        visible: workspacesMod.visible && workspacesMod.specialWorkspace !== null
+                 && opacity > 0.01
+        opacity: root.pillRowFade
+          * ((workspacesMod.visible && workspacesMod.specialWorkspace !== null) ? 1 : 0)
         Behavior on opacity { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
         color: workspacesMod.specialFocused
           ? Qt.rgba(Zenon.red.r, Zenon.red.g, Zenon.red.b, 0.22)
@@ -608,8 +692,9 @@ ShellRoot {
       readonly property real trayGlowW: bg.leftHasContent ? workspacesMod.width + Zenon.gap * 2 : Zenon.padBar + workspacesMod.x + workspacesMod.width + Zenon.gap - bg.border.width
       Rectangle {
         id: trayGlow
-        visible: workspacesMod.hasTray && opacity > 0.01
-        opacity: root.pillRowFade * (workspacesMod.hasTray ? 1 : 0)
+        visible: workspacesMod.visible && workspacesMod.hasTray && opacity > 0.01
+        opacity: root.pillRowFade
+          * ((workspacesMod.visible && workspacesMod.hasTray) ? 1 : 0)
         Behavior on opacity { NumberAnimation { duration: Zenon.fast; easing.type: Zenon.ease } }
         anchors.top: parent.top
         anchors.bottom: parent.bottom
@@ -672,17 +757,25 @@ ShellRoot {
           }
           // tray lives inside workspaces now — hover to reveal, crossfades and autofits
           Collapsible {
-            active: notifMod.active || updateMod.active
+            // and the rule this divider has always followed — something on the
+            // left of it — now has a second half, because there is a switch
+            // that can empty its right.
+            active: (notifMod.active || updateMod.active) && Oracle.showWorkspaces
             openWidth: Zenon.gap * 2 + 1
             Divider { implicitHeight: Zenon.slot }
           }
-          Workspaces { id: workspacesMod; implicitHeight: Zenon.slot }
+          Workspaces {
+            id: workspacesMod
+            implicitHeight: Zenon.slot
+            visible: Oracle.showWorkspaces
+          }
 
           Item { Layout.fillWidth: true; implicitHeight: 1 }
 
-          Divider { implicitHeight: Zenon.slot }
+          Divider { implicitHeight: Zenon.slot; visible: Oracle.showClock }
           ClockModule {
             implicitHeight: Zenon.slot
+            visible: Oracle.showClock
             // the clock opens the calendar, the same way the bell opens howler
             onActivated: chronos.toggle()
           }
@@ -696,27 +789,31 @@ ShellRoot {
           // names the view it is about, so a click lands on what you clicked
           // rather than wherever the panel was left. Clicking the same meter
           // again closes it.
-          Divider { implicitHeight: Zenon.slot }
+          Divider { implicitHeight: Zenon.slot; visible: root.metersShown }
           NetworkModule {
             implicitHeight: Zenon.slot
+            visible: Oracle.showNetwork
             onActivated: zeus.toggleAt("net")
           }
-          Gap {}
+          Gap { visible: root.meterGap(0) }
           GpuModule {
             implicitHeight: Zenon.slot
+            visible: Oracle.showGpu
             onActivated: zeus.toggleAt("graphs")
           }
-          Gap {}
+          Gap { visible: root.meterGap(1) }
           CpuModule {
             implicitHeight: Zenon.slot
+            visible: Oracle.showCpu
             onActivated: zeus.toggleAt("graphs")
           }
-          Gap {}
+          Gap { visible: root.meterGap(2) }
           MemoryModule {
             implicitHeight: Zenon.slot
+            visible: Oracle.showMemory
             onActivated: zeus.toggleAt("graphs")
           }
-          Gap {}
+          Gap { visible: root.meterGap(3) }
 
           // Volume and the track name are one group with one panel between
           // them. They show the SAME panel, so hovering across from one to the
@@ -732,6 +829,7 @@ ShellRoot {
             id: audioGroup
             implicitWidth: audioRow.implicitWidth
             implicitHeight: Zenon.slot
+            visible: root.audioShown
             Layout.preferredWidth: audioRow.implicitWidth
             Layout.preferredHeight: Zenon.slot
 
@@ -741,9 +839,10 @@ ShellRoot {
               PulseAudioModule {
                 id: volMod
                 implicitHeight: Zenon.slot
+                visible: Oracle.showVolume
                 onActivated: zeus.toggleAt("sound")
               }
-              DividerSlot { active: nowMod.active }
+              DividerSlot { active: Oracle.showVolume && nowMod.active }
               NowPlayingModule { id: nowMod; implicitHeight: Zenon.slot }
             }
 

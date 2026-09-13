@@ -25,15 +25,21 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "helpers.js" as Helpers
+import "../oracle"
 import "."
 
 Singleton {
   id: root
 
-  // Two minutes at 1Hz. The bar's tooltip sparklines only ever drew the last
-  // thirty, and still do — a Sparkline trims to its own maxPoints — but zeus'
-  // graphs are four times as wide and want the room.
-  readonly property int span: 120
+  // Two minutes at 1Hz by default. The bar's tooltip sparklines only ever drew
+  // the last thirty, and still do — a Sparkline trims to its own maxPoints —
+  // but zeus' graphs are four times as wide and want the room.
+  //
+  // Shortening it takes effect as the histories are next pushed to, not by
+  // truncating what is already held: push() trims from the front each time, so
+  // a graph walks down to its new length over the next few seconds rather than
+  // losing its left half in one frame.
+  readonly property int span: Oracle.sysmonSpan
 
   function push(list, v) {
     const h = list.slice();
@@ -341,7 +347,7 @@ Singleton {
   // own phase. `if (!running)` on each: a poller that is somehow taking longer
   // than a second must not be asked again on top of itself.
   Timer {
-    interval: 1000
+    interval: Oracle.sysmonInterval
     repeat: true
     running: true
     onTriggered: {
@@ -354,7 +360,7 @@ Singleton {
 
   // the interface and address change far more rarely than the throughput does
   Timer {
-    interval: 3000
+    interval: Oracle.sysmonNetInterval
     repeat: true
     running: true
     onTriggered: {

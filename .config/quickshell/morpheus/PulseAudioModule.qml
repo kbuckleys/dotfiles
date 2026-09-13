@@ -28,9 +28,15 @@ Item {
 
     Meter {
       anchors.verticalCenter: parent.verticalCenter
-      // a muted sink reads as empty rather than as its remembered level
-      value: Volume.muted ? 0 : Volume.level
-      accent: Volume.muted ? Zenon.red : Zenon.green
+      // ONE OR THE OTHER, never both. The glyph above appears only while
+      // muted, and the meter used to stay beside it drawn empty and red —
+      // which is two things saying the same thing, and the emptier of the two
+      // is the one that reads as a level rather than as a state. Muted is not
+      // a quiet volume, it is the absence of one, so the bar says so with a
+      // glyph and takes the gauge away.
+      visible: !Volume.muted
+      value: Volume.level
+      accent: Zenon.green
     }
   }
 

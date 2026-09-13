@@ -31,3 +31,7 @@ Glow 1.0 Glow.qml
 singleton Strings 1.0 Strings.qml
 singleton Paths 1.0 Paths.qml
 singleton Desktop 1.0 Desktop.qml
+MenuShadow 1.0 MenuShadow.qml
+Scrollbar 1.0 Scrollbar.qml
+CardMenu 1.0 CardMenu.qml
+CornerPicker 1.0 CornerPicker.qml

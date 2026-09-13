@@ -132,10 +132,23 @@ function basename(p) {
 // The path as a row of pieces, each carrying the path it leads to, so the
 // crumb bar is a set of jump targets rather than a label. Built here because
 // it is string work, and the window should only have to render it.
-function crumbs(path) {
-  const out = [{ label: "/", path: "/" }];
-  let at = "";
-  for (const part of String(path).split("/")) {
+// A PATH UNDER HOME IS WRITTEN FROM HOME. Nobody thinks of their downloads as
+// the third thing down the filesystem, and "/ home / buck" spent two of the
+// bar's steps — a good quarter of it on a shallow path — restating something
+// every step after it already implies. `~` is what they would have typed.
+//
+// Only when home is a REAL prefix and not merely a string one: /home/buckley
+// begins with /home/buck and is not inside it, which is what the trailing
+// slash in the test is for. The crumb still carries the full path, so clicking
+// it goes home rather than to a directory called "~".
+function crumbs(path, home) {
+  const p = String(path);
+  const h = String(home || "");
+  const under = h !== "" && (p === h || p.indexOf(h + "/") === 0);
+  const out = under ? [{ label: "~", path: h }]
+                    : [{ label: "/", path: "/" }];
+  let at = under ? h : "";
+  for (const part of (under ? p.slice(h.length) : p).split("/")) {
     if (part === "") continue;
     at += "/" + part;
     out.push({ label: part, path: at });
@@ -907,6 +920,22 @@ function parseStat(text) {
 // to know — a directory's own size field is the size of the RECORD, 4096 bytes
 // for a folder containing a gigabyte. It is asked for on demand, never while
 // drawing a list: walking every row of /home would take longer than the panel.
+// WHAT IS IN A DIRECTORY, as two numbers on two lines: files then directories.
+//
+// Recursive, deliberately, because the row sits directly under the total size
+// and that size is the whole tree. Counting only the top level there would put
+// two numbers side by side that are answers to different questions — "4 items,
+// 30 GiB" reads as though four things weighed thirty gigabytes.
+//
+// Symlinks count as files rather than being followed: a link is a thing in the
+// directory, and following it would count another directory's contents into
+// this one's total and could walk in a circle doing it.
+function countCommand(paths) {
+  const q = paths.map((p) => Strings.shellQuote(p)).join(" ");
+  return "find " + q + " -mindepth 1 \\( -type f -o -type l \\) 2>/dev/null | wc -l; "
+    + "find " + q + " -mindepth 1 -type d 2>/dev/null | wc -l";
+}
+
 function sizeCommand(paths) {
   return "du -sbc -- " + paths.map((p) => Strings.shellQuote(p)).join(" ")
     + " 2>/dev/null | tail -1 | cut -f1";
@@ -994,6 +1023,18 @@ function deleteCommand(paths) {
 // an orphan nvim, gio open gave `foot -e nvim <file>` and a window.
 function openCommand(path) {
   return "gio open " + Strings.shellQuote(path) + " >/dev/null 2>&1 &";
+}
+
+// Something created a moment ago as an empty file, asked to be a directory
+// instead — which is what the trailing slash at the end of `a` means. Becoming
+// a directory is unmaking the file and making the other thing; there is no
+// operation that converts one into the other.
+//
+// Only ever run against a path this window made seconds ago and nothing has
+// had the chance to write to, which is why an unguarded rm is honest here.
+function recreateAsDir(fresh, target) {
+  return "rm -f -- " + Strings.shellQuote(fresh)
+    + " && mkdir -p -- " + Strings.shellQuote(target);
 }
 
 function mkdirCommand(dir, name) {
@@ -1094,14 +1135,31 @@ function transferCommand(paths, destDir, move, clash) {
     // its own contents. An explicit overwrite has to actually write.
     cmd = "rsync " + flags
       + (mode === CLASH.skip ? " --ignore-existing" : " --ignore-times")
-      + " -- " + quoted.join(" ") + " " + Strings.shellQuote(destDir + "/") + "\n";
+      + " -- " + quoted.join(" ") + " " + Strings.shellQuote(destDir + "/")
+      // EXIT ON FAILURE, so the sweep below cannot answer for it. Without
+      // this, a transfer that failed and a sweep that succeeded added up to a
+      // job that reported success — the keep-both branch has always had its
+      // own `|| exit 1` and this branch simply never got one.
+      + " || exit 1\n";
   }
 
   // --remove-source-files empties the source directories but leaves the
-  // directories themselves, so a move has to sweep them afterwards
+  // directories themselves, so a move has to sweep them afterwards.
+  //
+  // AND THE SWEEP MUST NOT DECIDE THE JOB'S FATE. `find` is handed the same
+  // paths rsync was, and rsync has just deleted them — so for a move of plain
+  // files every one of those paths is gone by the time find is asked about it,
+  // and find exits non-zero for having been asked. Being the last command in
+  // the script, its status became the script's: a move of files reported
+  // itself as FAILED every single time, having done exactly what was asked.
+  //
+  // There is no meaningful failure here in any case. Nothing was promised
+  // about directories that turn out not to be empty, and everything that can
+  // genuinely fail has already exited above.
   if (move) {
     cmd += "find " + quoted.join(" ")
-      + " -depth -type d -empty -delete 2>/dev/null\n";
+      + " -depth -type d -empty -delete 2>/dev/null\n"
+      + "exit 0\n";
   }
   return cmd;
 }
@@ -1141,12 +1199,127 @@ function trashCommand(paths) {
 // What is already there, asked BEFORE anything is written. cp and mv overwrite
 // without a word, so the answer to this is the whole difference between a
 // paste and a silent loss.
+// ── THE SYSTEM CLIPBOARD ──────────────────────────────────────────────────
+//
+// Terminus kept its own private clipboard: `y` recorded a list of paths in a
+// property and `p` rsynced them. That is fast and exact and it is not a
+// clipboard — copy a file here and nothing else on the machine knew; copy an
+// image out of a browser and there was nothing here to paste. A file manager
+// that cannot exchange with the rest of the desktop is a file manager for one
+// application.
+//
+// The internal list is KEPT, because it carries the copy/move distinction and
+// the exact paths, and because rsync with progress is better than anything a
+// clipboard can express. The system clipboard is written alongside it and read
+// when the internal one is empty, so the two never disagree about an operation
+// terminus itself started.
+//
+// text/uri-list, because it is the one type nearly everything understands for
+// "here are some files". wl-copy offers a single type per invocation, so this
+// is a choice: GTK file managers also speak x-special/gnome-copied-files,
+// which carries copy-versus-cut, and picking it would trade every other
+// application for that one distinction.
+function clipboardCopyCommand(paths) {
+  const uris = paths.map((p) => "file://" + encodeURI(p)).join("\r\n");
+  return "printf '%s' " + Strings.shellQuote(uris)
+    + " | wl-copy -t text/uri-list >/dev/null 2>&1";
+}
+
+// What the clipboard is holding, decided IN ONE ROUND TRIP.
+//
+// Asking for the type list and then asking again for the payload is two
+// processes with a gap between them, and the clipboard can change in that gap
+// — the second answer would be about something the first never saw. The shell
+// decides and returns the answer already labelled.
+//
+// Three things can come back: a list of files, an image that exists only on
+// the clipboard, or nothing worth having.
+function clipboardPasteCommand(destDir) {
+  const d = Strings.shellQuote(destDir);
+  return FREE_NAME
+    + 't=$(wl-paste --list-types 2>/dev/null)\n'
+    // GNOME's own file-clipboard format leads with the operation — "copy" or
+    // "cut" — and every GTK file manager writes it. Preferred when present
+    // because it is the only one that says which of the two it was.
+    + 'if printf \'%s\\n\' "$t" | grep -qx "x-special/gnome-copied-files"; then\n'
+    + '  printf \'gnome\\036\'\n'
+    + '  wl-paste -t x-special/gnome-copied-files 2>/dev/null\n'
+    + '  exit 0\n'
+    + 'fi\n'
+    + 'if printf \'%s\\n\' "$t" | grep -qx "text/uri-list"; then\n'
+    + '  printf \'uris\\036\'\n'
+    + '  wl-paste -t text/uri-list 2>/dev/null\n'
+    + '  exit 0\n'
+    + 'fi\n'
+    // An image with no file behind it: a screenshot, or something copied out
+    // of a browser. There is nothing to copy FROM, so there is a file to write.
+    + 'm=$(printf \'%s\\n\' "$t" | grep -m1 "^image/")\n'
+    + '[ -n "$m" ] || { printf \'none\\036\'; exit 0; }\n'
+    + 'ext=${m#image/}\n'
+    + 'case $ext in jpeg) ext=jpg ;; svg+xml) ext=svg ;; x-*) ext=${ext#x-} ;; esac\n'
+    + 'f=$(terminus_free ' + d + ' "Pasted image.$ext" "")\n'
+    + 'wl-paste -t "$m" > ' + d + '/"$f" 2>/dev/null'
+    + ' || { printf \'fail\\036\'; exit 0; }\n'
+    // An empty file is a failed paste wearing a name; say so rather than
+    // leaving a 0-byte thing in the directory.
+    + '[ -s ' + d + '/"$f" ] || { rm -f -- ' + d + '/"$f"; printf \'fail\\036\'; exit 0; }\n'
+    + 'printf \'wrote\\036%s\\036\' "$f"\n';
+}
+
+// A URL dropped in from outside — an image dragged off a web page, which
+// arrives as an http address and not as a file. Fetched into the directory it
+// was dropped on, under the name the server calls it.
+//
+// --remote-name-all would use the URL's last segment blindly, which is how you
+// end up with a file called "800px-Foo.jpg?v=3". -J prefers the name the
+// server states and -O falls back to the URL's own, and the whole thing lands
+// in a free name rather than over anything already there.
+function fetchUrlCommand(url, destDir, fallback) {
+  const d = Strings.shellQuote(destDir);
+  return FREE_NAME
+    + 'f=$(terminus_free ' + d + ' ' + Strings.shellQuote(fallback) + ' "")\n'
+    + 'curl -fsSL --max-time 120 -o ' + d + '/"$f" -- '
+    + Strings.shellQuote(url) + ' || { rm -f -- ' + d + '/"$f"; exit 1; }\n'
+    + '[ -s ' + d + '/"$f" ] || { rm -f -- ' + d + '/"$f"; exit 1; }\n';
+}
+
+// What to call a thing fetched from a URL when nothing better is known.
+function urlFallbackName(url) {
+  let u = String(url).split("#")[0].split("?")[0];
+  const cut = u.lastIndexOf("/");
+  let n = cut < 0 ? u : u.slice(cut + 1);
+  try { n = decodeURIComponent(n); } catch (e) { /* leave it as it came */ }
+  n = n.replace(/[\/\0]/g, "");
+  return n === "" ? "download" : n;
+}
+
 function conflictCommand(names, destDir) {
   const d = Strings.shellQuote(destDir);
   const tests = names.map((n) =>
     "[ -e " + d + "/" + Strings.shellQuote(n) + " ] && printf '%s\\036' "
     + Strings.shellQuote(n));
   return tests.join("; ") + "; true";
+}
+
+// Whether the archive about to be written is already there, and what it would
+// be called if the one that is there is kept. Both answers in one scan, for
+// the reason conflictCommand exists: the archivers overwrite without a word.
+//
+// The extension is passed in rather than worked out, because an archive's is
+// not the part after the last dot — trimming ".tar.zst" by that rule gives
+// "name.tar (1).zst", which names the copy after a file type it is not.
+function archiveTargetCommand(destDir, name, ext) {
+  const d = Strings.shellQuote(destDir);
+  const n = Strings.shellQuote(name);
+  const e = Strings.shellQuote(ext);
+  // Silent when the name is free, so an ordinary archive costs one stat and
+  // asks nothing.
+  return "[ -e " + d + "/" + n + " ] || exit 0\n"
+    + "n=" + n + "; e=" + e + "; stem=${n%\"$e\"}\n"
+    + "[ -n \"$stem\" ] || stem=$n\n"
+    + "i=1\n"
+    + "while [ -e " + d + "/\"$stem ($i)$e\" ]; do i=$((i+1)); done\n"
+    + "printf '%s\\036%s\\036' \"$n\" \"$stem ($i)$e\"\n";
 }
 
 function parseConflicts(text) {
@@ -1322,6 +1495,87 @@ function linkCommand(paths, destDir, symbolic) {
 // The seen-map has a NULL PROTOTYPE. A plain object inherits "toString",
 // "constructor" and a dozen more, so a file actually called toString made the
 // old duplicate check fire against a name nothing had used.
+// ── the batch rename's toolkit ────────────────────────────────────────────
+//
+// Every one of these takes the list and returns a new list. None of them reads
+// or writes anything else, which is what lets the card treat them as buttons:
+// press, see the result in the rows, press another, and undo by pressing the
+// one that got you here again. They are also, for the same reason, the only
+// part of batch renaming that can be checked without a window.
+//
+// STEM ONLY is the option every one of them carries, because it is the thing
+// people actually mean nine times in ten. "Lowercase these" means the name,
+// not the .JPG that the camera wrote and that the next program will look for.
+function splitExt(name) {
+  const n = String(name);
+  // A leading dot is the whole name of a dotfile, not an empty stem with an
+  // extension — ".bashrc" has no extension to preserve.
+  const at = n.lastIndexOf(".");
+  if (at <= 0) return [n, ""];
+  return [n.slice(0, at), n.slice(at)];
+}
+
+function mapPart(names, stemOnly, fn) {
+  return names.map((name) => {
+    if (!stemOnly) return fn(String(name));
+    const parts = splitExt(name);
+    return fn(parts[0]) + parts[1];
+  });
+}
+
+// Literal by default and a REGEX when asked. An invalid pattern returns the
+// names untouched rather than throwing: the field is being typed into, so it
+// is invalid most of the time it is read.
+function bulkReplaceIn(names, find, repl, useRegex, stemOnly) {
+  const f = String(find === undefined ? "" : find);
+  if (f === "") return names.slice();
+  const r = String(repl === undefined ? "" : repl);
+  if (!useRegex) return mapPart(names, stemOnly, (s) => s.split(f).join(r));
+  let re;
+  try { re = new RegExp(f, "g"); } catch (e) { return names.slice(); }
+  return mapPart(names, stemOnly, (s) => s.replace(re, r));
+}
+
+function titleCase(s) {
+  return s.replace(/([^\s\-_.]+)/g, (w) =>
+    w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+function bulkCase(names, mode, stemOnly) {
+  if (mode === "lower") return mapPart(names, stemOnly, (s) => s.toLowerCase());
+  if (mode === "upper") return mapPart(names, stemOnly, (s) => s.toUpperCase());
+  if (mode === "title") return mapPart(names, stemOnly, titleCase);
+  return names.slice();
+}
+
+// Runs of whitespace and underscores collapsed to one space, and the ends
+// trimmed. The commonest tidy-up there is, and the one hardest to do by hand
+// across forty rows.
+function bulkTidy(names, stemOnly) {
+  return mapPart(names, stemOnly, (s) =>
+    s.replace(/[\s_]+/g, " ").replace(/\s*-\s*/g, " - ").trim());
+}
+
+// Numbered in the order they are listed, which is the order they are shown —
+// so sorting the listing before opening the card is how you choose the order.
+// Padded to the width of the LAST number, so 1..10 is 01..10 and never 1..10
+// mixed, unless a wider pad is asked for.
+function bulkNumber(names, start, pad, where, sep, stemOnly) {
+  const from = parseInt(start, 10);
+  const base = isNaN(from) ? 1 : from;
+  const last = base + names.length - 1;
+  const width = Math.max(parseInt(pad, 10) || 0, String(last).length);
+  const s = sep === undefined ? " " : String(sep);
+  return names.map((name, i) => {
+    let num = String(base + i);
+    while (num.length < width) num = "0" + num;
+    const apply = (str) => where === "prefix" ? num + s + str : str + s + num;
+    if (!stemOnly) return apply(String(name));
+    const parts = splitExt(name);
+    return apply(parts[0]) + parts[1];
+  });
+}
+
 function bulkIssues(oldNames, newNames) {
   const out = [];
   const seen = Object.create(null);

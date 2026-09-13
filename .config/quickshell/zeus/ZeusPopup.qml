@@ -15,6 +15,7 @@ import "zeus.js" as Zeus
 import "sound.js" as Sound
 import "../morpheus"
 import "../morpheus/helpers.js" as Helpers
+import "../oracle"
 
 PanelWindow {
   id: popup
@@ -59,7 +60,7 @@ PanelWindow {
   property var statusbar: null
 
   readonly property color bgColor: Zenon.layerBg
-  readonly property color borderColor: Zenon.surface
+  readonly property color borderColor: Zenon.surfaceBorder
   readonly property color fgColor: Zenon.white
   readonly property color headColor: Zenon.cyan
   readonly property color keyColor: Zenon.keyInk
@@ -350,8 +351,19 @@ PanelWindow {
     // repaint half-updated — and a second with nothing on the wire commits an
     // empty buffer, which is the correct answer rather than a stale one.
     if (Zeus.isNetFrame(line)) {
+      // THE FRAME REPLACES THE MODEL, and handing a ListView a new array drops
+      // its scroll to the top. bandwhich prints a frame a second, so a list
+      // with more rows than fit was unreadable: every time you scrolled down
+      // to something it snapped back before you got there.
+      //
+      // Held across the swap and put back once the new rows have been laid
+      // out. Captured HERE rather than in a handler on the model, because this
+      // is the one place the order is certain — the offset is read while it is
+      // still the one you were looking at.
+      const held = netList.contentY;
       popup.netTables = popup.netBuf;
       popup.netBuf = { process: [], remote: [], connection: [] };
+      netList.restoreTo(held);
       return;
     }
     const row = Zeus.parseNetLine(line);
@@ -775,7 +787,7 @@ PanelWindow {
 
   Timer {
     id: refreshTimer
-    interval: 2500
+    interval: Oracle.zeusProcInterval
     repeat: true
     running: false
     onTriggered: {
@@ -803,7 +815,7 @@ PanelWindow {
             Strings.escapeHtml(modelData[0]) + "</span></b> <b><span style=\"color:" +
             popup.dimColor + ";\">" + Strings.escapeHtml(modelData[1]) + "</span></b>"
           textFormat: Text.RichText
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.pixelSize: 13
         }
       }
@@ -871,7 +883,11 @@ PanelWindow {
     // where you are looking, once — read from the unlatched value so a close
     // that has not finished animating cannot hand back a stale screen
     popup.homeScreen = popup.liveScreen;
-    popup.mode = "graphs";
+    // whichever view was asked for in oracle. toggleAt() still overrides it a
+    // moment later when a bar meter was the thing that opened this, so clicking
+    // a meter lands on what you clicked either way.
+    popup.mode = popup.views.indexOf(Oracle.zeusDefaultView) >= 0
+      ? Oracle.zeusDefaultView : "graphs";
     popup.confirming = false;
     popup.query = "";
     listBar.clear();
@@ -1056,7 +1072,7 @@ PanelWindow {
 
   Item {
     id: panel
-    width: 1000
+    width: Zenon.layerWidth(1000)
     height: popup.calcHeight()
     // Zenon.slow is the pill's own height easing in shell.qml
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
@@ -1064,10 +1080,20 @@ PanelWindow {
     // has to — so the unpinned case is written out rather than anchored. These
     // two expressions ARE the anchors they replace: centred horizontally, and
     // lifted off the bottom edge by exactly what every other layer uses.
-    x: popup.pinned ? popup.pinX : (parent.width - width) / 2
-    y: popup.pinned ? popup.pinY
-      : parent.height - height
-        - Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+    // Math.round for the same reason oracle's panel rounds: bgRoot clips
+    // through a texture, and a texture at a half-pixel offset resamples —
+    // which reads as every label in the panel going soft. Pinned and dragged,
+    // pinX accumulates wayland's sub-pixel motion deltas and is fractional
+    // almost immediately.
+    x: Math.round(popup.pinned ? popup.pinX : (parent.width - width) / 2)
+    // Unpinned, off whichever edge the bar is on by exactly the lift every
+    // other layer uses. Written out rather than anchored because pinned it is
+    // x/y that has to drive the position, and anchors and x/y cannot both.
+    y: Math.round(popup.pinned ? popup.pinY
+      : (Zenon.barTop
+          ? Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+          : parent.height - height
+            - Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)))
     // the panel grows and shrinks with the view; pinned near an edge that must
     // not push it off the screen
     onHeightChanged: popup.clampPin()
@@ -1075,7 +1101,8 @@ PanelWindow {
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -1380,7 +1407,7 @@ PanelWindow {
                 visible: popup.filtered.length === 0
                 text: "No matches found"
                 color: popup.dimColor
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 15
               }
@@ -1421,7 +1448,7 @@ PanelWindow {
                       text: Zeus.BALLOT
                       color: popup.errColor
                       anchors.verticalCenter: parent.verticalCenter
-                      font.family: "JetBrainsMono Nerd Font"
+                      font.family: Zenon.faceFixed
                       font.pixelSize: 16
                     }
                   }
@@ -1474,7 +1501,7 @@ PanelWindow {
         anchors.verticalCenter: parent.verticalCenter
         text: "\uF071"
         color: bar.ink
-        font.family: "JetBrainsMono Nerd Font Propo"
+        font.family: Zenon.face
         font.weight: 500
         font.pixelSize: 19
       }
@@ -1489,7 +1516,7 @@ PanelWindow {
         anchors.verticalCenter: parent.verticalCenter
         text: bar.status
         color: popup.dimColor
-        font.family: "JetBrainsMono Nerd Font Propo"
+        font.family: Zenon.face
         font.pixelSize: 13
       }
 
@@ -1512,7 +1539,7 @@ PanelWindow {
           color: bar.caretInk
           selectionColor: bar.ink
           selectedTextColor: "#000000"
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.weight: 500
           font.pixelSize: 17
           cursorVisible: activeFocus
@@ -1581,7 +1608,7 @@ PanelWindow {
           : head.label
         color: head.active ? popup.headColor
           : (headMa.containsMouse ? popup.keyColor : popup.dimColor)
-        font.family: "JetBrainsMono Nerd Font"
+        font.family: Zenon.faceFixed
         font.pixelSize: 12
 
         Behavior on color {
@@ -1615,7 +1642,7 @@ PanelWindow {
         horizontalAlignment: soundHead.rightAlign ? Text.AlignRight : Text.AlignLeft
         text: soundHead.label
         color: popup.dimColor
-        font.family: "JetBrainsMono Nerd Font"
+        font.family: Zenon.faceFixed
         font.pixelSize: 12
       }
     }
@@ -1645,7 +1672,7 @@ PanelWindow {
                     // their own width; see the mixer's NAME column.
                     textFormat: Text.RichText
                     clip: true
-                    font.family: "JetBrainsMono Nerd Font"
+                    font.family: Zenon.faceFixed
                     font.weight: Font.Medium
                     font.pixelSize: 16
                   }
@@ -1814,7 +1841,7 @@ PanelWindow {
                     : (popup.netQuery !== "" ? "No matches found"
                                              : "Nothing on the wire")
                   color: popup.netError !== "" ? popup.errColor : popup.dimColor
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: 600
                   font.pixelSize: 15
                 }
@@ -1851,7 +1878,7 @@ PanelWindow {
                       anchors.verticalCenter: parent.verticalCenter
                       text: "\uF023  grant access"
                       color: grantMa.containsMouse ? Zenon.green : popup.keyColor
-                      font.family: "JetBrainsMono Nerd Font Propo"
+                      font.family: Zenon.face
                       font.weight: Font.Bold
                       font.pixelSize: 12
                       Behavior on color { ColorAnimation { duration: Zenon.fast } }
@@ -1861,7 +1888,7 @@ PanelWindow {
                       anchors.verticalCenter: parent.verticalCenter
                       text: "or  " + popup.netFixHint
                       color: popup.dimColor
-                      font.family: "JetBrainsMono Nerd Font Propo"
+                      font.family: Zenon.face
                       font.pixelSize: 11
                     }
                   }
@@ -1886,6 +1913,25 @@ PanelWindow {
                 clip: true
                 model: popup.netModel
                 boundsBehavior: Flickable.StopAtBounds
+
+                // Put back after the model swap that dropped it — see
+                // onNetLine, which is where the offset is taken.
+                //
+                // DEFERRED, because contentHeight is not settled in the frame
+                // the rows are replaced in: clamping against it immediately
+                // would clamp against the old list's height, and a frame later
+                // it is the new one's. Clamped rather than assigned blind, so
+                // a table that shrank does not leave the view past its end.
+                property real wantY: 0
+                function restoreTo(y) {
+                  netList.wantY = y;
+                  Qt.callLater(netList.putBack);
+                }
+                function putBack() {
+                  const most = Math.max(0, netList.contentHeight - netList.height);
+                  const y = Math.max(0, Math.min(most, netList.wantY));
+                  if (Math.abs(netList.contentY - y) > 0.5) netList.contentY = y;
+                }
                 // The tables come and go with the traffic, so a delegate handed
                 // a row this frame may be handed a heading the next. Reused
                 // rather than rebuilt, the way the kill list's are.
@@ -1919,7 +1965,7 @@ PanelWindow {
                       text: modelData.head
                         ? modelData.title + "  " + modelData.count : ""
                       color: popup.headColor
-                      font.family: "JetBrainsMono Nerd Font Propo"
+                      font.family: Zenon.face
                       font.weight: Font.Bold
                       font.pixelSize: 11
                     }
@@ -2116,7 +2162,7 @@ PanelWindow {
                 visible: popup.soundEmpty
                 text: "No matches found"
                 color: popup.dimColor
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 15
               }
@@ -2254,7 +2300,7 @@ PanelWindow {
                       text: modelData.head
                         ? modelData.title + "  " + modelData.count : ""
                       color: popup.headColor
-                      font.family: "JetBrainsMono Nerd Font Propo"
+                      font.family: Zenon.face
                       font.weight: Font.Bold
                       font.pixelSize: 11
                     }
@@ -2366,7 +2412,7 @@ PanelWindow {
                         color: soundRow.isStream
                           ? (routeHov.hovered ? Zenon.green : popup.dimColor)
                           : Zenon.green
-                        font.family: "JetBrainsMono Nerd Font Propo"
+                        font.family: Zenon.face
                         font.weight: soundRow.isDevice ? Font.Bold : Font.Medium
                         font.pixelSize: 13
                       }
@@ -2529,7 +2575,7 @@ PanelWindow {
                           text: "\uF061  next of "
                             + (modelData.card ? modelData.card.profiles.length : 0)
                           color: profHov.hovered ? Zenon.green : popup.dimColor
-                          font.family: "JetBrainsMono Nerd Font Propo"
+                          font.family: Zenon.face
                           font.pixelSize: 12
                         }
                       }
@@ -2542,7 +2588,7 @@ PanelWindow {
                         visible: !profCell.switchable
                         text: modelData.card ? "no other profile" : ""
                         color: popup.dimColor
-                        font.family: "JetBrainsMono Nerd Font Propo"
+                        font.family: Zenon.face
                         font.pixelSize: 13
                       }
 
@@ -2578,7 +2624,7 @@ PanelWindow {
                         text: soundRow.muted ? "" : ""
                         color: soundRow.muted ? Zenon.green
                           : (muteHov.hovered ? popup.fgColor : popup.dimColor)
-                        font.family: "JetBrainsMono Nerd Font Propo"
+                        font.family: Zenon.face
                         font.pixelSize: 14
                       }
 
@@ -2608,7 +2654,7 @@ PanelWindow {
                         text: sound.isDefault(soundRow.node) ? "" : ""
                         color: sound.isDefault(soundRow.node) ? Zenon.green
                           : (defHov.hovered ? popup.fgColor : popup.dimColor)
-                        font.family: "JetBrainsMono Nerd Font Propo"
+                        font.family: Zenon.face
                         font.pixelSize: 13
                       }
 
@@ -2694,7 +2740,7 @@ PanelWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "SYSTEM"
                 color: popup.headColor
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 18
               }
@@ -2705,7 +2751,7 @@ PanelWindow {
                 anchors.verticalCenter: parent.verticalCenter
                 text: popup.statusLine
                 color: popup.dimColor
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.pixelSize: 13
               }
 
@@ -2775,7 +2821,7 @@ PanelWindow {
                 text: "Failed to kill PID(s): " + popup.failList.join(", ")
                 color: "#000000"
                 font.bold: true
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 700
                 font.pixelSize: 17
               }
@@ -2787,7 +2833,7 @@ PanelWindow {
               anchors.horizontalCenter: parent.horizontalCenter
               text: "press esc to go back"
               color: popup.dimColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.pixelSize: 13
             }
           }
@@ -2852,7 +2898,7 @@ PanelWindow {
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth + 8, parent.width - 40)
                 horizontalAlignment: Text.AlignHCenter
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 700
                 font.pixelSize: 17
               }
@@ -2885,7 +2931,7 @@ PanelWindow {
                       ? (modelData.action ? popup.errColor : popup.fgColor)
                       : popup.dimColor
                     font.bold: popup.confirmKill === modelData.action
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.weight: 700
                     font.pixelSize: 15
                   }
@@ -3008,7 +3054,7 @@ PanelWindow {
         anchors.left: parent.left
         text: popup.statLabel(statRow.statKey)
         color: statRow.ink
-        font.family: "JetBrainsMono Nerd Font Propo"
+        font.family: Zenon.face
         font.weight: Font.Bold
         font.pixelSize: 13
       }
@@ -3053,7 +3099,7 @@ PanelWindow {
           anchors.bottomMargin: 4
           text: popup.statUnit(statRow.statKey)
           color: popup.keyColor
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.weight: Font.Bold
           font.pixelSize: 13
         }
@@ -3138,7 +3184,7 @@ PanelWindow {
             anchors.right: parent.right
             text: parent.fact ? parent.fact.value : ""
             color: (parent.fact && parent.fact.ink) ? parent.fact.ink : popup.fgColor
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.weight: Font.Bold
             font.pixelSize: 14
           }
@@ -3146,7 +3192,7 @@ PanelWindow {
             anchors.right: parent.right
             text: parent.fact ? parent.fact.label : ""
             color: popup.dimColor
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.pixelSize: 11
           }
         }

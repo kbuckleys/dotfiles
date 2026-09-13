@@ -118,7 +118,7 @@ Item {
     text: bar.label
     color: bar.ink
     elide: Text.ElideRight
-    font.family: "JetBrainsMono Nerd Font Propo"
+    font.family: Zenon.face
     font.pixelSize: bar.fontSize
     // enough weight to stay one word where the fill's edge crosses it
     font.weight: bar.fontWeight

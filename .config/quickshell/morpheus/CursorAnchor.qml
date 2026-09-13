@@ -22,6 +22,11 @@ PanelWindow {
   // falls back to sitting centred over the anchor item.
   property MouseArea cursorArea: null
   property bool show: false
+  // Held shut regardless of `show`. The caller owns "is the pointer on me";
+  // this is for whoever owns "are these wanted at all" — see Tooltip, which
+  // is the one that answers to a setting. Kept out here rather than folded
+  // into `show` so a caller's own binding is never fought over.
+  property bool suppressed: false
   // pointer clearance: how far the popout's bottom edge sits above the cursor
   property int gap: 5
 
@@ -49,7 +54,8 @@ PanelWindow {
 
   // fade instead of popping; the window has to outlive the fade, so
   // visibility follows the factor rather than `show` directly
-  property real showFactor: (anchorRoot.show && anchorRoot.srcWin !== null) ? 1 : 0
+  property real showFactor: (anchorRoot.show && !anchorRoot.suppressed
+                             && anchorRoot.srcWin !== null) ? 1 : 0
   Behavior on showFactor {
     NumberAnimation { duration: Zenon.fast; easing.type: Zenon.ease }
   }
@@ -83,11 +89,17 @@ PanelWindow {
       anchorRoot.hotspot = anchorRoot.livePoint;
   }
 
-  // bottom centre pinned to the pointer, clamped so it never leaves the screen
+  // Pinned to the pointer and clamped so it never leaves the screen — ABOVE
+  // it normally, and below it when the bar is at the top. A tooltip belonging
+  // to a bar module has to open away from that bar: above the pointer with
+  // the bar overhead, the clamp would pin it to y=0 and it would come up
+  // underneath the very module it was describing.
   margins.left: !anchorRoot.srcWin || !anchorRoot.screen ? 0 :
     Math.round(Math.max(0, Math.min(anchorRoot.hotspot.x - anchorRoot.implicitWidth / 2,
       anchorRoot.screen.width - anchorRoot.implicitWidth)))
   margins.top: !anchorRoot.srcWin || !anchorRoot.screen ? 0 :
-    Math.round(Math.max(0, Math.min(anchorRoot.hotspot.y - anchorRoot.gap - anchorRoot.implicitHeight,
+    Math.round(Math.max(0, Math.min(
+      Zenon.barTop ? anchorRoot.hotspot.y + anchorRoot.gap
+        : anchorRoot.hotspot.y - anchorRoot.gap - anchorRoot.implicitHeight,
       anchorRoot.screen.height - anchorRoot.implicitHeight)))
 }

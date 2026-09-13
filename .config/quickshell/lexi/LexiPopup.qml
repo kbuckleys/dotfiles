@@ -56,7 +56,7 @@ PanelWindow {
   property var statusbar: null
 
   readonly property color bgColor: Zenon.layerBg
-  readonly property color borderColor: Zenon.surface
+  readonly property color borderColor: Zenon.surfaceBorder
   readonly property color msgColor: Zenon.headBg
   readonly property color msgBorder: Zenon.msgBorder
   readonly property color fgColor: Zenon.white
@@ -120,7 +120,7 @@ PanelWindow {
             Strings.escapeHtml(modelData[0]) + "</span></b> <span style=\"color:" +
             popup.dimColor + ";\">" + Strings.escapeHtml(modelData[1]) + "</span>"
           textFormat: Text.RichText
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.pixelSize: 15
         }
       }
@@ -773,21 +773,27 @@ PanelWindow {
 
   Item {
     id: panel
-    width: popup.wide ? 1000 : 800
+    width: Zenon.layerWidth(popup.wide ? 1000 : 800)
     height: popup.calcHeight()
     // Zenon.slow is the pill's own width/height easing in shell.qml
     Behavior on width { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -846,7 +852,7 @@ PanelWindow {
               anchors.horizontalCenter: parent.horizontalCenter
               text: Lexicon.ICON_HEAD
               color: popup.headColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.pixelSize: 18
             }
           }
@@ -866,7 +872,7 @@ PanelWindow {
               color: popup.headColor
               selectionColor: popup.headColor
               selectedTextColor: "#000000"
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 600
               font.pixelSize: 18
               cursorVisible: activeFocus
@@ -921,7 +927,7 @@ PanelWindow {
               anchors.horizontalCenter: parent.horizontalCenter
               text: Lexicon.ICON_TRANSLATE
               color: popup.headColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.pixelSize: 18
             }
           }
@@ -943,7 +949,7 @@ PanelWindow {
               selectedTextColor: "#000000"
               placeholderText: "text to translate…"
               placeholderTextColor: popup.dimColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 600
               font.pixelSize: 18
               background: null
@@ -1023,7 +1029,7 @@ PanelWindow {
                   return det + "  →  " + popup.targetLang.name;
                 }
                 color: popup.dimColor
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 16
 
@@ -1040,7 +1046,7 @@ PanelWindow {
                 text: popup.live && popup.live.error
                   ? "no translation — check connection" : ""
                 color: popup.errColor
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 16
               }
@@ -1056,7 +1062,7 @@ PanelWindow {
                 wrapMode: Text.WordWrap
                 horizontalAlignment: Text.AlignHCenter
                 textFormat: Text.RichText
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 17
               }
@@ -1073,7 +1079,7 @@ PanelWindow {
                 wrapMode: Text.WordWrap
                 horizontalAlignment: Text.AlignHCenter
                 textFormat: Text.RichText
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 17
               }
@@ -1125,7 +1131,7 @@ PanelWindow {
                     text: Lexicon.ICON_HEAD
                     color: popup.headColor
                     anchors.verticalCenter: parent.verticalCenter
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.pixelSize: 19
                   }
 
@@ -1135,7 +1141,7 @@ PanelWindow {
                       : Strings.escapeHtml(popup.dictQuery)
                     color: popup.headColor
                     anchors.verticalCenter: parent.verticalCenter
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.weight: 600
                     font.pixelSize: 18
                   }
@@ -1148,7 +1154,7 @@ PanelWindow {
                     text: popup.dictResult ? popup.dictResult.ipa || "" : ""
                     color: popup.headColor
                     anchors.verticalCenter: parent.verticalCenter
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.weight: 600
                     font.pixelSize: 18
                   }
@@ -1161,7 +1167,7 @@ PanelWindow {
                             ? popup.dictResult.audio.code || "" : "")
                     color: popup.headColor
                     anchors.verticalCenter: parent.verticalCenter
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.weight: 600
                     font.pixelSize: 18
 
@@ -1180,7 +1186,7 @@ PanelWindow {
                     color: popup.dimColor
                     font.italic: true
                     anchors.verticalCenter: parent.verticalCenter
-                    font.family: "JetBrainsMono Nerd Font Propo"
+                    font.family: Zenon.face
                     font.pixelSize: 15
                   }
                 }
@@ -1216,7 +1222,7 @@ PanelWindow {
                 text: popup.dictError
                 color: popup.errColor
                 wrapMode: Text.WordWrap
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.pixelSize: 17
               }
 
@@ -1244,7 +1250,7 @@ PanelWindow {
                   horizontalAlignment: Text.AlignHCenter
                   wrapMode: Text.WordWrap
                   textFormat: Text.RichText
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: 500
                   font.pixelSize: 17
                 }
@@ -1294,7 +1300,7 @@ PanelWindow {
                   // one — without it, typing filters an apparently static list
                   text: popup.query === "" ? "Translate to" : popup.query
                   color: popup.headColor
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: 600
                   font.pixelSize: 18
                 }
@@ -1329,7 +1335,7 @@ PanelWindow {
                       modelData.name + " (" + modelData.code + ")"
                 color: popup.fgColor
                 opacity: index === popup.sel ? 1 : 0.85
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 17
               }
@@ -1386,7 +1392,7 @@ PanelWindow {
                   anchors.horizontalCenter: parent.horizontalCenter
                   text: popup.appMode === "dict" ? "Look-up history" : "Translation history"
                   color: popup.headColor
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: 600
                   font.pixelSize: 18
                 }
@@ -1422,7 +1428,7 @@ PanelWindow {
                 opacity: index === popup.sel ? 1 : 0.85
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth + 8, histList.width - 60)
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 500
                 font.pixelSize: 17
               }

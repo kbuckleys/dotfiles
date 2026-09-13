@@ -13,6 +13,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import QtQuick.Window
 import "../morpheus"
+import "../oracle"
 
 Variants {
   // one surface per monitor, rebuilt by Quickshell when monitors come and go
@@ -182,7 +183,7 @@ Variants {
         if (img._pendingZoom) {
           img._pendingZoom = false;
           img._zoomInstant = true;
-          img.scale = 1.08;
+          img.scale = Oracle.backgroundZoom;
           img._zoomInstant = false;
           img.scale = 1.0;
         }
@@ -194,7 +195,12 @@ Variants {
 
     component Wall: AnimatedImage {
       id: wall
-      fillMode: Picasso.fillMode
+      // THIS surface's monitor, not a global. The Wall component is declared
+      // inside the per-screen surface, so `surface.modelData` is the output
+      // it is painting — which is the whole point of the fit being per
+      // monitor: the portrait screen can centre what the landscape one crops.
+      fillMode: Picasso.fillModeFor(
+        surface.modelData ? surface.modelData.name : "")
       asynchronous: true
       cache: false
       smooth: true
@@ -321,11 +327,13 @@ Variants {
       }
       Component.onCompleted: wall._measure()
 
-      // Headroom for the zoom: the surface scales to 1.08 on arrival and each
-      // Wall replays the same 1.08 on a change, so the image is briefly drawn
-      // larger than the screen, and a decode pinned to exactly the screen
-      // would soften for the length of that animation.
-      readonly property real _zoom: 1.08
+      // Headroom for the zoom: the surface scales to Oracle.backgroundZoom on
+      // arrival and each Wall replays the same figure on a change, so the image
+      // is briefly drawn larger than the screen, and a decode pinned to exactly
+      // the screen would soften for the length of that animation. One setting
+      // feeds all three, which is what keeps the decode from being too small
+      // for the move it has to cover.
+      readonly property real _zoom: Oracle.backgroundZoom
       readonly property real _dpr: wall.Screen.devicePixelRatio
       readonly property int _coverW: Math.ceil(wall.width * wall._zoom * wall._dpr)
       readonly property int _coverH: Math.ceil(wall.height * wall._zoom * wall._dpr)
@@ -361,13 +369,15 @@ Variants {
       id: wallContainer
       anchors.fill: parent
       opacity: surface.intro
-      // zoom from 1.08 down to 1.0 driven by the same scalar as opacity,
-      // so the two stay locked without a second Behavior chasing the first
+      // zoom from Oracle.backgroundZoom down to 1.0 driven by the same scalar
+      // as opacity, so the two stay locked without a second Behavior chasing
+      // the first
+      readonly property real zoomBy: Oracle.backgroundZoom - 1
       transform: Scale {
         origin.x: wallContainer.width / 2
         origin.y: wallContainer.height / 2
-        xScale: 1 + 0.08 * (1 - surface.intro)
-        yScale: 1 + 0.08 * (1 - surface.intro)
+        xScale: 1 + wallContainer.zoomBy * (1 - surface.intro)
+        yScale: 1 + wallContainer.zoomBy * (1 - surface.intro)
       }
 
       Wall {

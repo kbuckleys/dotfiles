@@ -21,7 +21,7 @@ Text {
   text: root.styled ? Helpers.apply(root.src) : Helpers.collapse(root.src)
   textFormat: root.styled ? Text.StyledText : Text.PlainText
   color: root.textColor
-  font.family: root.numeric ? Zenon.clockFamily : "JetBrainsMono Nerd Font Propo"
+  font.family: root.numeric ? Zenon.clockFamily : Zenon.face
   font.weight: Font.Bold
   font.pixelSize: root.numeric ? Zenon.clockSize : Zenon.textSize
   // Sized to the slot rather than to its own line. A bare BarText next to a

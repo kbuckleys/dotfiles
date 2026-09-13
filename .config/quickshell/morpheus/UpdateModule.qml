@@ -7,11 +7,15 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "helpers.js" as Helpers
+import "../oracle"
 import "."
 
 Collapsible {
   id: root
-  active: root.hasUpdates
+  // Turned off in oracle this eases to zero width exactly as it does when
+  // there is nothing pending — the pill shrink-wraps around what is left
+  // rather than the module disappearing out of a layout mid-frame.
+  active: Oracle.showUpdates && root.hasUpdates
   openWidth: row.implicitWidth
 
   property bool hasUpdates: false
@@ -44,8 +48,12 @@ Collapsible {
       return;
     }
     if (key === root.notified) return;
+    // The key is still recorded when the toast is switched off, so turning it
+    // back on does not announce a set of updates that has been sitting there
+    // all along — only the next genuinely new one.
     root.notified = key;
     notifiedFile.setText(key);
+    if (!Oracle.updateNotify) return;
     // The SAME body the hover tooltip shows — buildTooltip(), not the raw list
     // waybar-updates hands over. It is the same information either way, but the
     // tooltip's version is grouped into official and AUR, counted, and laid out;
@@ -203,7 +211,7 @@ Collapsible {
 
   Timer {
     id: updateTimer
-    interval: 3600000
+    interval: Oracle.updateCheckMins * 60000
     onTriggered: {
       if (!proc.running) proc.running = true;
     }
@@ -211,7 +219,10 @@ Collapsible {
 
   Process {
     id: proc
-    command: ["waybar-updates", "-d", "-c", "3600", "-l", "100"]
+    // -c is waybar-updates' own poll, in seconds, and it has to agree with the
+    // timer above or the slower of the two would be the real interval.
+    command: ["waybar-updates", "-d",
+              "-c", String(Oracle.updateCheckMins * 60), "-l", "100"]
     stdout: SplitParser {
       onRead: (line) => {
         try {

@@ -42,4 +42,22 @@ QtObject {
   function configDir() {
     return Quickshell.env("XDG_CONFIG_HOME") || Paths.home() + "/.config";
   }
+
+  // The user directories are NOT environment variables the way the ones above
+  // are. xdg-user-dirs writes them to a file — see userDirsFile() — and only
+  // exports them into the environment if something in the session was set up
+  // to do that, which on this machine nothing is. So this is the last resort
+  // rather than the answer: the env var if a session happens to export it,
+  // and otherwise the specification's own default.
+  //
+  // The file is read by whoever needs it (picasso does), because reading a
+  // file wants a FileView and this singleton is deliberately nothing but
+  // string functions over the environment.
+  function userDirsFile() {
+    return Paths.configDir() + "/user-dirs.dirs";
+  }
+
+  function pictures() {
+    return Quickshell.env("XDG_PICTURES_DIR") || Paths.home() + "/Pictures";
+  }
 }

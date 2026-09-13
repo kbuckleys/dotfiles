@@ -8,11 +8,12 @@
 // bar and the notification daemon stay separable.
 
 import QtQuick
+import "../oracle"
 import "."
 
 Collapsible {
   id: root
-  active: root.unread > 0
+  active: Oracle.showNotifications && root.unread > 0
   openWidth: row.implicitWidth
 
   // arrived since the history panel was last opened

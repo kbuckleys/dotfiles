@@ -4,11 +4,18 @@
 // https://github.com/kbuckleys/
 
 import QtQuick
+import "../oracle"
 import "."
 import "helpers.js" as Helpers
 
 CursorAnchor {
   id: popup
+
+  // Every hover text in the bar comes through here, so this is the one place
+  // the switch has to be. NowPlayingPanel is a CursorAnchor too and is NOT
+  // caught by it, which is right: it is a panel with transport controls in
+  // it, not a label telling you what you are pointing at.
+  suppressed: !Oracle.barTooltips
 
   required property string text
   property bool styled: false
@@ -42,7 +49,7 @@ CursorAnchor {
     implicitHeight: layout.height
     opacity: popup.showFactor
     color: Zenon.panelBg
-    border.color: Zenon.surface
+    border.color: Zenon.surfaceBorder
     border.width: 1
     radius: 6
 
@@ -64,7 +71,7 @@ CursorAnchor {
         text: popup.styled ? Helpers.tooltip(popup.text) : popup.text
         textFormat: popup.styled ? Text.StyledText : Text.PlainText
         color: Zenon.white
-        font.family: "JetBrainsMono Nerd Font Propo"
+        font.family: Zenon.face
         font.weight: Font.Bold
         font.pixelSize: 16
         horizontalAlignment: popup.align
