@@ -54,7 +54,7 @@ PanelWindow {
   property var statusbar: null
 
   readonly property color bgColor: Zenon.layerBg
-  readonly property color borderColor: Zenon.surface
+  readonly property color borderColor: Zenon.surfaceBorder
   readonly property color fgColor: Zenon.white
   readonly property color headColor: Zenon.blue
   readonly property color keyColor: Zenon.keyInk
@@ -91,7 +91,7 @@ PanelWindow {
             Strings.escapeHtml(modelData[0]) + "</span></b> <b><span style=\"color:" +
             popup.dimColor + ";\">" + Strings.escapeHtml(modelData[1]) + "</span></b>"
           textFormat: Text.RichText
-          font.family: "JetBrainsMono Nerd Font Propo"
+          font.family: Zenon.face
           font.pixelSize: 13
         }
       }
@@ -264,20 +264,26 @@ PanelWindow {
 
   Item {
     id: panel
-    width: 600
+    width: Zenon.layerWidth(600)
     height: popup.calcHeight()
     // Zenon.slow is the pill's own height easing in shell.qml
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -366,7 +372,7 @@ PanelWindow {
               text: "\uDB80\uDCEC"
               color: popup.headColor
               anchors.verticalCenter: parent.verticalCenter
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 500
               font.pixelSize: 19
             }
@@ -382,7 +388,7 @@ PanelWindow {
                 color: popup.headColor
                 selectionColor: popup.headColor
                 selectedTextColor: "#000000"
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: Font.Bold
                 font.pixelSize: 20
                 cursorVisible: activeFocus
@@ -437,7 +443,7 @@ PanelWindow {
               visible: popup.shownExpr.length > 0
               text: (popup.fromHistory ? "↺ " : "") + popup.shownExpr + "  ="
               color: popup.dimColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 14
             }
@@ -450,7 +456,7 @@ PanelWindow {
               elide: Text.ElideMiddle
               width: Math.min(implicitWidth + 8, popup.width - 40)
               horizontalAlignment: Text.AlignHCenter
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 26
             }
@@ -460,7 +466,7 @@ PanelWindow {
               visible: popup.shownResult.length === 0 && popup.query.trim().length > 0
               text: "…"
               color: popup.dimColor
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.pixelSize: 16
             }
           }

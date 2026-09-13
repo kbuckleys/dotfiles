@@ -16,6 +16,7 @@ import Quickshell.Io
 import Quickshell.Services.Notifications
 import Quickshell.Services.Mpris
 import "../morpheus"
+import "../oracle"
 import "howler.js" as Wolf
 
 Singleton {
@@ -28,47 +29,62 @@ Singleton {
   // token instead, and the two can no longer drift apart.
   //
   //   font=JetBrainsMono Nerd Font Propo SemiBold 12
-  readonly property string fontFamily: "JetBrainsMono Nerd Font Propo"
+  readonly property string fontFamily: Zenon.face
   readonly property int fontWeight: Font.DemiBold
   // mako's 12 is points; 16px is what that comes out as here, and it is the
   // size every other panel in this shell already uses
-  readonly property int fontSize: 16
+  readonly property int fontSize: Oracle.notifFontSize
   //   border-size=1  border-radius=5  padding=5  margin=2  outer-margin=0,0,20
-  readonly property int borderSize: 1
-  readonly property int radius: 5
-  readonly property int padding: 5
-  readonly property int margin: 2
-  readonly property int outerMargin: 20
+  readonly property int borderSize: Oracle.notifBorderSize
+  readonly property int radius: Oracle.notifRadius
+  readonly property int padding: Oracle.notifPadding
+  readonly property int margin: Oracle.notifSpacing
+  readonly property int outerMargin: Oracle.notifLift
   //   width=400  height=400   (mako's height is a per-toast maximum)
   //   400 is now a FLOOR rather than the width: a toast grows with its text
   //   up to toastMaxWidth, which mako had no equivalent for.
-  readonly property int toastWidth: 400
-  readonly property int toastMaxWidth: 800
-  readonly property int toastMaxHeight: 400
+  readonly property int toastWidth: Oracle.notifWidth
+  //   never narrower than the floor above, whatever the two are set to
+  //   independently — a maximum under its own minimum is a toast with a
+  //   negative amount of room for its text
+  readonly property int toastMaxWidth:
+    Math.max(Oracle.notifWidth, Oracle.notifMaxWidth)
+  readonly property int toastMaxHeight: Oracle.notifMaxHeight
   //   nothing shorter than this, so a one-word notification still reads as a
   //   panel rather than as a strip
-  readonly property int minHeight: 64
+  readonly property int minHeight: Oracle.notifMinHeight
   //   max-visible=5
-  readonly property int maxVisible: 5
+  readonly property int maxVisible: Oracle.notifMaxVisible
   //   icons=1  max-icon-size=96  icon-border-radius=5  icon-location=left
-  readonly property bool iconsEnabled: true
+  readonly property bool iconsEnabled: Oracle.notifIcons
   //   what an icon is actually drawn at — mako's 96 is the ceiling, not the
   //   size, and 64 was leaving album art smaller than it deserved
-  readonly property int iconSize: 76
-  readonly property int iconRadius: 5
+  readonly property int iconSize: Oracle.notifIconSize
+  readonly property int iconRadius: Oracle.notifIconRadius
   //   markup=1  text-alignment=center
-  readonly property bool markup: true
-  readonly property int textAlign: Text.AlignHCenter
+  readonly property bool markup: Oracle.notifMarkup
+  //   named in oracle rather than numbered — "centre" is a thing a person can
+  //   choose, Text.AlignHCenter is a flag that happens to be 4 — so the
+  //   translation happens here, where Text is already in scope
+  readonly property int textAlign: {
+    if (Oracle.notifTextAlign === "left") return Text.AlignLeft;
+    if (Oracle.notifTextAlign === "right") return Text.AlignRight;
+    return Text.AlignHCenter;
+  }
   //   default-timeout=5000, and the per-urgency overrides under it
-  readonly property int timeoutLow: 4000
-  readonly property int timeoutNormal: 4000
-  // [urgency=critical] default-timeout=0 — never expires on its own
-  readonly property int timeoutCritical: 0
+  readonly property int timeoutLow: Oracle.notifTimeoutLow
+  readonly property int timeoutNormal: Oracle.notifTimeout
+  // [urgency=critical] default-timeout=0 — never expires on its own. Off, a
+  // critical notification is given the ordinary timeout rather than a timeout
+  // of its own: the point of the switch is "do not make me dismiss these", and
+  // inventing a third number for it would be a setting nobody asked for.
+  readonly property int timeoutCritical:
+    Oracle.notifCriticalSticky ? 0 : Oracle.notifTimeout
 
   // mako had history=0. That is the one line of its config deliberately NOT
   // ported: the whole point of the bar's bell is that a toast you missed is
   // still there afterwards.
-  readonly property int historyCap: 200
+  readonly property int historyCap: Oracle.notifHistoryCap
 
   function bgFor(urgency) {
     if (urgency === NotificationUrgency.Low) return Zenon.green;
@@ -122,7 +138,7 @@ Singleton {
   // a snapshot survives both the dismissal and the next shell restart.
   property var history: []
   // whether to also record notifications from MPRIS music players
-  property bool trackMusic: false
+  readonly property bool trackMusic: Oracle.notifTrackMusic
   // how many have arrived since the history panel was last opened
   property int unread: 0
 
@@ -220,8 +236,11 @@ Singleton {
     return (h && h["x-mpris-player"]) || "";
   }
 
+  // The setting itself lives in oracle now — this is still the place that
+  // TOGGLES it, because the history sweep below has to happen on the same
+  // turn, and oracle knows nothing about notification rows.
   function toggleMusicTracking(): string {
-    root.trackMusic = !root.trackMusic;
+    Oracle.set("notifTrackMusic", !root.trackMusic);
     // turning it off retroactively clears what it let in, so the list matches
     // the setting rather than keeping a tail of songs nobody asked for
     if (!root.trackMusic) root.cleanHistory();

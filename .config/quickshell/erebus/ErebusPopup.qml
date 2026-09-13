@@ -220,13 +220,17 @@ PanelWindow {
     // appeared at its final size over a pill still easing down from morpheus'
     // full width — the single most visible seam in the whole morph.
     width: (popup.morphMode && popup.statusbar && popup.statusbar.width > 0)
-      ? popup.statusbar.width : 250
+      ? popup.statusbar.width : Zenon.layerWidth(250)
     // Morphed, width already IS the pill's easing width — a Behavior on top
     // would be a second easing chasing an easing source. Standalone there is
     // no pill to follow and the width never changes, so none is needed.
     anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: parent.bottom
-    anchors.bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+    // whichever edge the bar is on — the unused anchor is left undefined so
+    // the two can never both apply
+    anchors.top: Zenon.barTop ? parent.top : undefined
+    anchors.bottom: Zenon.barTop ? undefined : parent.bottom
+    anchors.topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+    anchors.bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     // and the pill's live height for the same reason: shell.qml eases the pill
     // from the collapsed bar height up to calcHeight(), and a panel that was
     // already at its final height sat proud of the pill for that whole ease.
@@ -259,8 +263,10 @@ PanelWindow {
       // Cynosure's slide-up, adopted: standalone entrance is a fade plus a
       // slide from bg.height, morphed the pill has already travelled so
       // no second slide — the panel IS the pill.
+      // slides out of the edge the bar is on, which is the edge it came from
       transform: Translate {
-        y: popup.morphMode ? 0 : bg.height * (1 - popup.showFactor)
+        y: popup.morphMode ? 0
+          : (Zenon.barTop ? -1 : 1) * bg.height * (1 - popup.showFactor)
       }
 
       Item {
@@ -318,7 +324,7 @@ PanelWindow {
                   anchors.centerIn: parent
                   text: modelData.label
                   color: parent.selected ? popup.ink : popup.idleGlyph
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: Font.Bold
                   font.pixelSize: 18
                   horizontalAlignment: Text.AlignHCenter
@@ -366,7 +372,7 @@ PanelWindow {
                 return e ? e.label : "";
               }
               color: popup.accent
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 18
               horizontalAlignment: Text.AlignHCenter
@@ -400,7 +406,7 @@ PanelWindow {
                   anchors.centerIn: parent
                   text: modelData.label
                   color: index === popup.sel ? popup.ink : popup.idleGlyph
-                  font.family: "JetBrainsMono Nerd Font Propo"
+                  font.family: Zenon.face
                   font.weight: Font.Bold
                   font.pixelSize: 18
                   horizontalAlignment: Text.AlignHCenter

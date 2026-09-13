@@ -97,7 +97,7 @@ PanelWindow {
   property int flashSeq: 0
 
   readonly property color bgColor: Zenon.layerBg
-  readonly property color borderColor: Zenon.surface
+  readonly property color borderColor: Zenon.surfaceBorder
   readonly property color selColor: Zenon.selBg
   readonly property color msgColor: Zenon.headBg
   readonly property color msgBorder: Zenon.msgBorder
@@ -119,7 +119,7 @@ PanelWindow {
 
   TextMetrics {
     id: textMetrics
-    font.family: "JetBrainsMono Nerd Font Propo"
+    font.family: Zenon.face
     font.pixelSize: 16
     font.weight: 600
     text: "M"
@@ -501,21 +501,27 @@ PanelWindow {
 
   Item {
     id: panel
-    width: popup.panelWidth
+    width: Zenon.layerWidth(popup.panelWidth)
     height: popup.bodyH
     // Zenon.slow is the pill's own height easing in shell.qml; if these drift
     // apart the panel visibly detaches from its background mid-resize
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -578,7 +584,7 @@ PanelWindow {
               text: ""
               visible: searchInput.text.length > 0
               color: Zenon.magenta
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 18
               verticalAlignment: Text.AlignVCenter
@@ -591,7 +597,7 @@ PanelWindow {
               color: Zenon.magenta
               selectionColor: Zenon.magenta
               selectedTextColor: "#000000"
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 18
               verticalAlignment: Text.AlignVCenter
@@ -645,7 +651,7 @@ PanelWindow {
               : popup.query.trim() === "" ? "type to search"
               : "No matches found"
             color: popup.hintColor
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.weight: 600
             font.pixelSize: 15
             visible: popup.shown && popup.rows.length === 0
@@ -679,7 +685,15 @@ PanelWindow {
               // icarus drags a file out of its browser. encodeURI rather than
               // raw concatenation: half the paths in this index have spaces in
               // them, and text/uri-list wants them percent-encoded.
-              Drag.active: rowDrag.active
+              // NOT BOUND TO THE HANDLER, and that is the whole reason the
+              // drag card never appeared. A binding starts the drag the
+              // instant the handler activates — which is a frame before
+              // grabToImage can answer — so Drag.imageSource was still empty
+              // when the compositor asked for the icon, and assigning it
+              // afterwards only broke the binding. Set imperatively in the
+              // grab's callback instead, so the picture exists before the
+              // drag does.
+              Drag.active: false
               Drag.source: row
               Drag.keys: ["text/uri-list"]
               Drag.mimeData: ({ "text/uri-list": "file://" + encodeURI(row.modelData.path) + "\r\n" })
@@ -688,6 +702,8 @@ PanelWindow {
               Drag.hotSpot.x: width / 2
               Drag.hotSpot.y: height / 2
               Drag.onDragFinished: function(dropAction) {
+                // Cleared by hand now that nothing binds it — see Drag.active.
+                row.Drag.active = false
                 popup.dragging = false
                 if (dropAction === Qt.CopyAction) popup.closePopup()
               }
@@ -731,7 +747,7 @@ PanelWindow {
                 // the icons are drawn on a fixed advance, and in the
                 // proportional face they come out at different widths, so the
                 // paths would not line up down the column.
-                font.family: "JetBrainsMono Nerd Font Mono"
+                font.family: Zenon.faceMono
                 // A touch larger than the path beside it. These are pictures,
                 // not letters: at the text's own size they read as smudges in
                 // the margin rather than as marks you can tell apart at a
@@ -751,7 +767,7 @@ PanelWindow {
                 }
                 color: modelData.isDir ? popup.dirColor : popup.fgColor
                 textFormat: Text.RichText
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 16
                 clip: true
@@ -800,12 +816,25 @@ PanelWindow {
                 id: rowDrag
                 target: null
                 onActiveChanged: {
-                  if (active) {
-                    // region first, so the surface is already transparent by
-                    // the time the drag is offered
-                    popup.dragging = true
+                  if (!active) return
+                  // region first, so the surface is already transparent by
+                  // the time the drag is offered
+                  popup.dragging = true
+                  // WHAT YOU ARE CARRYING, drawn beside the cursor. Without it
+                  // a drag out of here was an invisible one: the popup gets out
+                  // of the way the moment the gesture starts, so between
+                  // picking a result up and dropping it there was nothing on
+                  // screen saying which result it was. terminus has said so
+                  // since it learned to drag, and this is the same card.
+                  //
+                  // The picture is made BEFORE the drag is offered, because
+                  // Drag.imageSource is read when Drag.active turns true and
+                  // grabToImage answers a frame later — set them the other way
+                  // round and every drag carries the previous one's picture.
+                  popup.dragPicture(row, function(url) {
+                    row.Drag.imageSource = url
                     row.Drag.active = true
-                  }
+                  })
                 }
               }
 
@@ -848,7 +877,7 @@ PanelWindow {
                 text: modelData
                 color: popup.hintColor
                 textFormat: Text.RichText
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 14
                 verticalAlignment: Text.AlignVCenter
@@ -905,6 +934,79 @@ PanelWindow {
           }
         }
       }
+    }
+  }
+
+  // ── what a drag is carrying ───────────────────────────────────────────
+  // Off screen and never seen directly: it exists to be photographed. The
+  // labels are filled in, the picture is taken, and the drag carries the
+  // photograph.
+  property string dragLabel: ""
+  property string dragGlyph: ""
+  property color dragInk: Zenon.white
+  // The grab result is HELD, not discarded. It owns the image the compositor
+  // is still reading from; let it go and the drag can end up carrying nothing.
+  property var dragGrab: null
+
+  function dragPicture(row, then) {
+    const p = String(row.modelData.path || "")
+    const bare = row.modelData.isDir ? p.replace(/\/+$/, "") : p
+    const cut = bare.lastIndexOf("/")
+    // The NAME, not the path. A drag card is read at a glance beside a moving
+    // cursor, and the rest of the path is what the row behind it is already
+    // showing.
+    popup.dragLabel = cut < 0 ? bare : bare.slice(cut + 1)
+    popup.dragGlyph = row.glyph
+    popup.dragInk = row.modelData.isDir ? popup.dirColor : popup.fgColor
+    // A failed grab is not a reason to refuse the drag; it just goes without
+    // a picture, which is what it did before there was one.
+    if (!dragCard.grabToImage(function(res) { popup.dragGrab = res; then(res.url) }))
+      then("")
+  }
+
+  Item {
+    id: dragCard
+    opacity: 0
+    z: -100
+    x: -4000
+    height: 38
+
+    // SIZED FROM THE TEXT rather than from a laid-out row, and anchored rather
+    // than positioned, because grabToImage reads the width in the same tick the
+    // labels are filled in — a Row would not have set its own width yet, and
+    // the first drag of every session would carry a card cut to a few pixels.
+    readonly property real pad: 12
+    width: dragCard.pad * 2 + dragCardGlyph.implicitWidth
+      + (popup.dragGlyph !== "" ? 8 : 0) + dragCardLabel.implicitWidth
+
+    Rectangle {
+      anchors.fill: parent
+      radius: 6
+      color: Zenon.layerBg
+      border.width: 1
+      border.color: Zenon.cyan
+    }
+
+    Text {
+      id: dragCardGlyph
+      anchors.left: parent.left
+      anchors.leftMargin: dragCard.pad
+      anchors.verticalCenter: parent.verticalCenter
+      text: popup.dragGlyph
+      color: popup.dragInk
+      font.family: Zenon.faceFixed
+      font.pixelSize: 16
+    }
+
+    Text {
+      id: dragCardLabel
+      anchors.left: dragCardGlyph.right
+      anchors.leftMargin: popup.dragGlyph !== "" ? 8 : 0
+      anchors.verticalCenter: parent.verticalCenter
+      text: popup.dragLabel
+      color: Zenon.white
+      font.family: Zenon.face
+      font.pixelSize: 15
     }
   }
 

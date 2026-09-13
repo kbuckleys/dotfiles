@@ -17,6 +17,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import "weather.js" as Wx
+import "../oracle"
 
 Singleton {
   id: root
@@ -40,13 +41,20 @@ Singleton {
   // it did not
   property string error: ""
   readonly property bool ready: root.current !== null
+  // Switched off is not the same as broken, and the pane has to be able to say
+  // so — an empty forecast with no explanation reads as a network failure.
+  readonly property bool disabled: !Oracle.weatherEnabled
 
-  // °F is a display choice, toggled from the pane and remembered
-  property bool fahrenheit: false
+  // °F is a display choice, toggled from the pane and remembered. The
+  // remembering is oracle's now — it is a setting like any other, and keeping
+  // a second copy of it in weather-place.json alongside the coordinates meant
+  // the panel and the settings panel could disagree about it. resolvePlace()
+  // still reads the old field once, so nobody's existing choice is lost.
+  readonly property bool fahrenheit: Oracle.weatherFahrenheit
   readonly property string unit: root.fahrenheit ? "°F" : "°C"
 
   // how stale the forecast is allowed to get before an open re-fetches it
-  readonly property int staleAfter: 10 * 60 * 1000
+  readonly property int staleAfter: Oracle.weatherStaleMins * 60 * 1000
 
   // ── derived ──────────────────────────────────────────────────────────
   readonly property var today: root.days.length > 0 ? root.days[0] : null
@@ -66,15 +74,19 @@ Singleton {
   function fmt(c) { return Wx.temp(c, root.fahrenheit); }
 
   function toggleUnits() {
-    root.fahrenheit = !root.fahrenheit;
-    root.savePlace();
+    Oracle.set("weatherFahrenheit", !root.fahrenheit);
   }
 
   // ── the requests ─────────────────────────────────────────────────────
   // curl rather than XMLHttpRequest: it is the same shape every other network
   // call in this shell already has, it takes a timeout, and a QML http stack
   // failure is much harder to see than a non-zero exit.
+  // ONE gate, at the two doors every request comes through. Putting it on the
+  // timer alone would have left the panel's own open-it-and-it-refreshes path
+  // and the retry-after-failure path still talking to the network, which is
+  // most of the traffic — the timer is the quiet one.
   function refresh() {
+    if (!Oracle.weatherEnabled) return;
     if (root.loading) return;
     if (!root.located) { root.locate(); return; }
     root.loading = true;
@@ -91,6 +103,7 @@ Singleton {
   }
 
   function locate() {
+    if (!Oracle.weatherEnabled) return;
     if (root.loading) return;
     root.loading = true;
     locateProc.command = ["curl", "-s", "--max-time", "10", Wx.locateUrl()];
@@ -173,9 +186,9 @@ Singleton {
   // ── the schedule ─────────────────────────────────────────────────────
   Timer {
     id: poll
-    interval: 15 * 60 * 1000
+    interval: Oracle.weatherRefreshMins * 60 * 1000
     repeat: true
-    running: true
+    running: Oracle.weatherEnabled
     onTriggered: root.refresh()
   }
 
@@ -203,10 +216,12 @@ Singleton {
     printErrors: false
   }
 
+  // WHERE we are, and nothing else. The unit moved to oracle; writing it here
+  // as well would make this file the second opinion on a question that now has
+  // a first one.
   function savePlace() {
     placeFile.setText(JSON.stringify({
-      lat: root.lat, lon: root.lon, place: root.place,
-      fahrenheit: root.fahrenheit
+      lat: root.lat, lon: root.lon, place: root.place
     }));
   }
 
@@ -227,7 +242,12 @@ Singleton {
         root.lat = j.lat;
         root.lon = j.lon;
         root.place = j.place ?? "here";
-        root.fahrenheit = j.fahrenheit === true;
+        // Migration, once: a file written before the unit moved still carries
+        // it, and someone who had chosen °F should not be put back to °C by an
+        // upgrade. Only ever true -> oracle, never the other way, so oracle's
+        // own answer wins from then on.
+        if (j.fahrenheit === true && !Oracle.weatherFahrenheit)
+          Oracle.set("weatherFahrenheit", true);
       }
     } catch (e) {}
   }

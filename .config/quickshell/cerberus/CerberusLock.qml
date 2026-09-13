@@ -21,36 +21,53 @@ import Quickshell.Wayland
 import Quickshell.Services.Pam
 import Quickshell.Widgets
 import "../morpheus"
+import "../oracle"
 
 Scope {
   id: root
 
   // ── hyprlock.conf, ported ────────────────────────────────────────────
   //   $font = JetBrainsMono Nerd Font Mono Medium
-  readonly property string fontFamily: "JetBrainsMono Nerd Font Mono"
+  readonly property string fontFamily: Zenon.faceMono
   readonly property int fontWeight: Font.Medium
   //   $monitor = DP-1 — the input field and both labels named this monitor;
-  //   every other output gets background only.
-  readonly property string widgetMonitor: "DP-1"
+  //   every other output gets background only. Named rather than fixed: which
+  //   output you actually look at first is a fact about the desk, not about
+  //   this shell, and effectiveWidgetMonitor below still catches a name that
+  //   is not plugged in.
+  readonly property string widgetMonitor: Oracle.lockWidgetMonitor
   //   general { hide_cursor = true }
-  readonly property bool hideCursor: true
+  readonly property bool hideCursor: Oracle.lockHideCursor
 
   //   background { color = rgba(0,0,0,0.6), blur_size = 12, blur_passes = 5 }
-  readonly property real shadeAlpha: 0.6
+  readonly property real shadeAlpha: Oracle.lockShade
    //   blur_size 12 over 5 passes is an enormous blur — the result is colour
   //   smears with no legible text left. Qt's MultiEffect could not reach it:
   //   its radius caps at 64px, which across a 2560px output still left text
   //   readable, which on a lock screen is the entire point missed. So the
   //   blur happens once at capture instead of every frame on the GPU —
   //   downsample, blur, upsample, which is what those five passes are.
-   readonly property string blurPipeline: "-resize 8% -blur 0x10 -resize 1250%"
+   //   The two resizes are each other's inverse, so the shot comes back at the
+   //   size it went in at whatever the strength is set to: shrink to N%, blur,
+   //   then blow back up by 100/N. Written as arithmetic rather than as two
+   //   numbers, because two numbers can be set so they do not undo each other,
+   //   and the result of that is a lock screen at the wrong resolution.
+   readonly property string blurPipeline:
+     "-resize " + Oracle.lockBlurStrength + "% -blur 0x10 -resize "
+     + Math.round(10000 / Math.max(1, Oracle.lockBlurStrength)) + "%"
 
   //   input-field { font_color / check_color / fail_color = rgba(223,223,221,1) }
   readonly property color fg: Zenon.white
   //   the date label's own colour = rgba(160,160,155,1)
-  readonly property color dateFg: "#a0a09b"
+  // THE LOCK SCREEN'S SECOND VOICE. The clock, the title and the play glyph
+  // are the first — clockFg, white at 0.85. This is everything standing one
+  // step behind them: the date, in both places it is drawn, and the artist
+  // under the track. One value, because they are one role; it was a slightly
+  // different grey from the artist's until the two were asked to match, which
+  // is the kind of difference nobody chooses on purpose.
+  readonly property color dateFg: "#969daf"
   //   input-field { size = 20%, 10%; outline_thickness = 0; inner_color = transparent }
-  readonly property real fieldWidthFrac: 0.20
+  readonly property real fieldWidthFrac: Oracle.lockFieldWidth
   readonly property real fieldHeightFrac: 0.10
   //   dots_size = 0.2, dots_spacing = 0.4 — both relative to the field height
   readonly property real dotsSize: 0.2
@@ -71,14 +88,13 @@ Scope {
   //   "\uF09DE" reads as U+F09D followed by "E". Literal characters are the one
   //   form with no trap in it.
   readonly property string dotGlyph: "󰧞"
-  readonly property string checkGlyph: "󰔛"
   readonly property string failGlyph: "\uF00D"
   readonly property string unlockedGlyph: "\uF52A"
 
   //   label { text = $TIME, font_size = 16, position = 0,47, valign = bottom }
   //   ...and two pixels larger than hyprlock had it, now that it is drawn
   //   as segments rather than as type.
-  readonly property int clockSize: 18
+  readonly property int clockSize: Oracle.lockClockSize
   readonly property color clockFg: Qt.rgba(Zenon.white.r, Zenon.white.g, Zenon.white.b, 0.85)
   // The bar's clock face, worn here too. Named from Zenon rather than restated,
   // so there is one answer to "what does a clock look like in this shell".
@@ -91,7 +107,7 @@ Scope {
   //   label { date, font_size = 12, position = 0,25, valign = bottom }
   //   ...also two larger than hyprlock had it, to keep its weight against the
   //   segments above it.
-  readonly property int dateSize: 14
+  readonly property int dateSize: Oracle.lockDateSize
   readonly property int dateBottom: 25
 
   // hyprlock drew the placeholder, check and fail glyphs at half the field
@@ -103,7 +119,6 @@ Scope {
   // at a common size the lock stands 76 units tall and the stopwatch only 70,
   // which is why the stopwatch read as the smaller icon even though both were
   // set at the same pixelSize. Compensated so the two agree on screen.
-  readonly property real checkScale: 76 / 70
 
   // ── motion ───────────────────────────────────────────────────────────
   // No fade — the lock appears and vanishes as a hard cut. Instant is
@@ -112,40 +127,6 @@ Scope {
   property bool covering: false
   property real reveal: root.covering ? 1 : 0
 
-  // ── the dust ─────────────────────────────────────────────────────────
-  // Tiny squares drifting down, scattered across the output in faint cyans.
-  // Something for the eye to rest on while you type, not something to look at.
-  //
-  // Built once per surface, from its own size: each square gets its own
-  // column, size, speed, hue and starting delay, so the field never falls in
-  // step with itself. After that every one of them is a single looping
-  // animation on `y` — no javascript runs per frame.
-  readonly property var dustHues: [
-    "#9bbfbf", "#7fb0b0", "#b3d0d0", "#6f9c9c", "#c3dcdc"
-  ]
-  readonly property int dustCount: 260
-
-  function dustField(w, h, count) {
-    const out = [];
-    for (let i = 0; i < count; ++i) {
-      const size = 2 + Math.floor(Math.random() * 3);          // 2..4 px
-      out.push({
-        x: Math.random() * w,
-        size: size,
-        hue: root.dustHues[Math.floor(Math.random() * root.dustHues.length)],
-        // the smaller ones are dimmer and slower, which reads as distance
-        alpha: 0.12 + Math.random() * 0.26,
-        fall: 9000 + Math.random() * 17000,
-        // one-time, so they are already scattered down the screen rather than
-        // all starting from the top together. Short enough that the field is
-        // full within a few seconds of the lock appearing — a long stagger
-        // meant the screen was nearly empty for the whole time you were
-        // actually looking at it.
-        delay: Math.random() * 6000
-      });
-    }
-    return out;
-  }
 
   // ── now playing awareness ────────────────────────────────────────
   // When a track is active (playing or paused) the lock's footer splits:
@@ -186,8 +167,12 @@ Scope {
   //
   // Offered only once the counter is actually spent. A permanently visible
   // "press this to clear your failures" is an instruction to a stranger.
-  //   faillock.conf: deny= is unset, so this is pam_faillock's own default
-  readonly property int failDeny: 3
+  //   faillock.conf: deny= is unset, so 3 is pam_faillock's own default — and
+  //   this number has to AGREE with pam's, not replace it. Setting it higher
+  //   than pam's deny does not buy more attempts; it only stops the reset
+  //   button appearing while the stack is already refusing you. Lower is safe
+  //   and simply offers the reset early.
+  readonly property int failDeny: Oracle.lockFailLimit
   property int failTally: 0
   readonly property bool lockedOut: root.failTally >= root.failDeny
 
@@ -308,10 +293,7 @@ Scope {
     stdout: StdioCollector {
       id: capsOut
       waitForEnd: true
-      onStreamFinished: {
-        console.log("CAPSPROBE read=" + JSON.stringify(String(capsOut.text).trim()));
-        root.capsOn = String(capsOut.text).trim() === "1";
-      }
+      onStreamFinished: root.capsOn = String(capsOut.text).trim() === "1";
     }
   }
 
@@ -353,6 +335,7 @@ Scope {
   function release() {
     root.note("lock:release keys=" + root.keysSeen
       + " keyboard=" + root.keyboardHere);
+    root.pollUptime = false;
     root.covering = false;
     sessionLock.locked = false;
     root.shotReady = false;
@@ -428,15 +411,23 @@ Scope {
   // stays at one, the guard never runs, and the lock sits there deaf with its
   // recovery timer switched off. Which is exactly what was reported.
   //
-  // So it runs regardless, and asking is free: forceActiveFocus() on an item
-  // that already has it does nothing at all. Two speeds only so that the
-  // provably-broken case recovers in a quarter second while the healthy case
-  // costs one no-op every two seconds.
+  // So it runs regardless of what keyboardHere says, and asking is free:
+  // forceActiveFocus() on an item that already has it does nothing at all.
+  // Two speeds only so that the provably-broken case recovers in a quarter
+  // second while the healthy case costs one no-op every two seconds.
+  //
+  // REGARDLESS OF THE COUNT, NOT REGARDLESS OF THE LOCK. Dropping the
+  // `keyboardHere === 0` half of the old predicate was the fix; dropping the
+  // `locked` half with it was not. Unlocked there is no lock surface to hold
+  // focus, so the count is legitimately zero — which put the timer on its
+  // 250ms footing forever, reclaiming four times a second and logging every
+  // one of them, for the whole life of the session rather than the life of a
+  // lock. The log this was written to stay legible in was the one it buried.
   Timer {
     id: earGuard
     interval: root.keyboardHere === 0 ? 250 : 2000
     repeat: true
-    running: sessionLock.locked
+    running: root.locked
     onTriggered: {
       // Only says so when it can actually tell something is wrong. The
       // two-second heartbeat is the case where nothing here CAN tell, and a
@@ -559,6 +550,7 @@ Scope {
   }
 
   function lock() {
+    root.pollUptime = true;
     if (sessionLock.locked) return;
     root.pw = "";
     root.phase = "input";
@@ -750,50 +742,6 @@ Scope {
           color: Qt.rgba(0, 0, 0, root.shadeAlpha)
         }
 
-        // ── the dust ─────────────────────────────────────────────────
-        Item {
-          id: dust
-          anchors.fill: parent
-          clip: true
-
-          // Bound, not built in Component.onCompleted: at completion the
-          // surface has not been configured yet and still measures 0x0, so
-          // every square was generated into column zero and fell down the
-          // left edge in a single invisible line. This waits for a real size.
-          property var field: (surf.width > 0 && surf.height > 0)
-            ? root.dustField(surf.width, surf.height, root.dustCount)
-            : []
-
-          Repeater {
-            model: dust.field
-
-            delegate: Rectangle {
-              id: mote
-              required property var modelData
-              x: mote.modelData.x
-              width: mote.modelData.size
-              height: mote.modelData.size
-              color: mote.modelData.hue
-              opacity: mote.modelData.alpha
-              y: -mote.height
-
-              SequentialAnimation on y {
-                running: true
-                // the outer sequence runs once — that is the stagger — and the
-                // fall inside it is what loops
-                PauseAnimation { duration: mote.modelData.delay }
-                SequentialAnimation {
-                  loops: Animation.Infinite
-                  NumberAnimation {
-                    from: -mote.height
-                    to: surf.height + mote.height
-                    duration: mote.modelData.fall
-                  }
-                }
-              }
-            }
-          }
-        }
 
         // ── the widgets, on $monitor only ──────────────────────────────
         Item {
@@ -840,34 +788,104 @@ Scope {
             id: verdict
             anchors.centerIn: parent
             //   check_text / fail_text / unlocked
-            text: root.phase === "checking" ? root.checkGlyph : root.phase === "fail" ? root.failGlyph : root.unlockedGlyph
+            //   fail_text / unlocked. The WAIT is not a glyph any more — see
+            //   the ripple below.
+            text: root.phase === "fail" ? root.failGlyph : root.unlockedGlyph
             color: root.fg
             font.family: root.fontFamily
             font.weight: root.fontWeight
             font.pixelSize: field.height * root.glyphScale
-              * (root.phase === "checking" ? root.checkScale : 1)
 
-            // A heartbeat while pam is thinking, so the wait has something
-            // alive in it. It drives SCALE, not opacity: multiplied into the
-            // opacity binding it could only ever make the glyph fainter, and
-            // any moment where the factor read as zero took the glyph off
-            // screen entirely rather than dimming it. It also swells ABOVE 1
-            // rather than dipping below — a beat that shrinks spends half its
-            // time making the icon look smaller than it is meant to be.
-            property real pulse: 1
-            opacity: root.phase === "input" ? 0 : 1
+            opacity: (root.phase === "input" || root.phase === "checking") ? 0 : 1
             visible: opacity > 0.01
-            scale: (root.phase === "input" ? 0.7 : 1) * verdict.pulse
+            scale: (root.phase === "input" || root.phase === "checking") ? 0.7 : 1
 
             Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutQuint } }
             Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
+          }
 
-            SequentialAnimation {
-              running: root.phase === "checking"
-              loops: Animation.Infinite
-              onStopped: verdict.pulse = 1
-              NumberAnimation { target: verdict; property: "pulse"; to: 1.09; duration: 560; easing.type: Easing.InOutSine }
-              NumberAnimation { target: verdict; property: "pulse"; to: 1.0; duration: 560; easing.type: Easing.InOutSine }
+          // ── the wait, as a RIPPLE ────────────────────────────────────
+          // It was a stopwatch, pulsing. A stopwatch is a picture of waiting,
+          // which is an odd thing to draw at somebody about an operation that
+          // takes a quarter of a second — it promises a delay, and then the
+          // pulse has to work to prove the thing is still alive.
+          //
+          // What is wanted is something that says "working" without asking to
+          // be looked at, and without the spinning every other program reaches
+          // for: a throbber's whole idea is a rate, and there is no rate here
+          // to report. Rings leaving the centre and fading as they widen say
+          // the same thing and claim nothing. Nothing rotates, so there is no
+          // motion for the eye to lock onto and no false sense of progress
+          // being measured.
+          //
+          // Three, evenly out of phase, so the field is never empty and never
+          // crowded. A circle is a Rectangle with a radius of half its width,
+          // which is one node each — a shader for this would be extravagant.
+          Item {
+            id: ripple
+            anchors.centerIn: parent
+            width: field.height * root.glyphScale
+            height: ripple.width
+            // NOT THE INSTANT CHECKING BEGINS.
+            //
+            // A correct password comes back in well under a tenth of a second,
+            // so showing the rings the moment pam is asked meant a successful
+            // unlock flashed them for a frame or two on its way to the open
+            // lock — a burst of movement that says "working" about something
+            // that has already finished, and reads as a stutter rather than as
+            // feedback. A refusal is the slow case, because pam makes it slow
+            // on purpose.
+            //
+            // So the rings are what appears when the answer does NOT come
+            // straight back. A quarter of a second is past the point where a
+            // success could still be pending and well short of where a wait
+            // starts to feel unanswered.
+            visible: root.rippleDue
+
+            Repeater {
+              model: 3
+
+              delegate: Rectangle {
+                id: ring
+                required property int index
+                anchors.centerIn: parent
+                width: ripple.width
+                height: ripple.width
+                radius: ring.width / 2
+                color: "transparent"
+                border.width: 2
+                border.color: root.fg
+                opacity: 0
+                scale: 0.35
+
+                SequentialAnimation {
+                  running: ripple.visible
+                  loops: Animation.Infinite
+                  // the stagger, so the three are evenly spread through one
+                  // ring's lifetime rather than arriving together
+                  PauseAnimation { duration: ring.index * 500 }
+                  ParallelAnimation {
+                    NumberAnimation {
+                      target: ring; property: "scale"
+                      from: 0.35; to: 1.0
+                      duration: 1500; easing.type: Easing.OutCubic
+                    }
+                    // In quickly and out slowly: a ring that faded evenly
+                    // spent its first moments as a hard edge appearing from
+                    // nothing, which reads as a flash rather than a swell.
+                    SequentialAnimation {
+                      NumberAnimation {
+                        target: ring; property: "opacity"
+                        from: 0; to: 0.55; duration: 320
+                      }
+                      NumberAnimation {
+                        target: ring; property: "opacity"
+                        to: 0; duration: 1180; easing.type: Easing.InCubic
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
 
@@ -1023,11 +1041,19 @@ Scope {
         //   ones — which is what the panel of a real clock is doing.
         //   Centred when no track; pushed to the bottom-right (rtl) when a
         //   track is active so the bottom-left can host the now-playing.
-        Item {
+        // The clock and the uptime are centred AS A PAIR rather than the clock
+        // being centred with something hung off it — otherwise adding the
+        // second reading pushes the first off the middle of the screen, which
+        // is the one thing its placement was about.
+        Row {
           visible: surf.showsWidgets && !root.hasTrack
           anchors.horizontalCenter: parent.horizontalCenter
           anchors.bottom: parent.bottom
           anchors.bottomMargin: root.clockBottom
+          spacing: 16
+
+        Item {
+          anchors.verticalCenter: parent.verticalCenter
           width: Math.max(lockGhost.implicitWidth, lockTime.implicitWidth)
           height: lockTime.implicitHeight
 
@@ -1045,6 +1071,35 @@ Scope {
             id: lockTime
             anchors.centerIn: parent
             text: Qt.formatDateTime(clock.date, "HH:mm")
+            color: root.clockFg
+            font.family: Zenon.clockFamily
+            font.weight: Font.Bold
+            font.pointSize: root.clockSize
+          }
+        }
+
+          // THE CLOCK'S OWN FACE, not a footnote beside it. Two readings of
+          // the same kind — how long, and when — so they are set the same way
+          // and the glyph between them is what says they are different
+          // questions. Nothing at all until it has been read, so the pair does
+          // not jump sideways a moment after the lock appears.
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.uptimeText !== ""
+            text: root.uptimeSep
+            // THE SAME INK AS THE DIGITS EITHER SIDE OF IT. It was drawn in
+            // ghostFg — the unlit-segment colour — which made the separator
+            // read as part of the clock's backing rather than as a mark
+            // between two readings.
+            color: root.clockFg
+            font.family: root.fontFamily
+            font.pixelSize: root.sepSize
+          }
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.uptimeText !== ""
+            text: root.uptimeText
             color: root.clockFg
             font.family: Zenon.clockFamily
             font.weight: Font.Bold
@@ -1080,9 +1135,13 @@ Scope {
           height: 92
 
           Row {
+            id: npRow
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 14
+            // The sleeve is a solid block of artwork and the text beside it is
+            // now nearly as tall, so they need real air between them or they
+            // read as one object. 14 was set against much smaller type.
+            spacing: 22
 
             ClippingRectangle {
               id: npArtBox
@@ -1118,10 +1177,20 @@ Scope {
               }
             }
 
+            // ── AS TALL AS THE COVER BESIDE IT ───────────────────────
+            // Three rows at 15/13/12 with 2px between them came to about 58
+            // against an 84px sleeve, so the text sat as a small block halfway
+            // up a large square. Sized up until the column fills the art it is
+            // standing next to — the sleeve is the thing setting the scale
+            // here, and the type should answer to it rather than the other way
+            // round.
             Column {
               anchors.verticalCenter: parent.verticalCenter
-              width: npLeft.width - 98
-              spacing: 2
+              // What is left after the sleeve and the gap, rather than a
+              // number that happened to equal them — those two have moved
+              // twice now and this did not follow either time.
+              width: npLeft.width - npArtBox.width - npRow.spacing
+              spacing: 6
 
               Row {
                 width: parent.width
@@ -1130,20 +1199,25 @@ Scope {
                 Text {
                   id: playIcon
                   anchors.verticalCenter: parent.verticalCenter
+                  // The clock's white, not a flat one: the lock screen's text
+                  // all sits at the same weight against the wallpaper, and a
+                  // fully opaque title beside a 0.85 clock reads as the louder
+                  // of the two for no reason.
                   text: NowPlaying.playing ? "" : ""
-                  color: Zenon.green
-                  font.family: "JetBrainsMono Nerd Font Propo"
-                  font.pixelSize: 14
+                  color: root.clockFg
+                  font.family: Zenon.face
+                  // with the title, not with what it used to sit beside
+                  font.pixelSize: 17
                 }
 
                 Text {
                   id: titleText
                   width: Math.min(implicitWidth, parent.width - playIcon.implicitWidth - parent.spacing)
                   text: NowPlaying.title
-                  color: Zenon.green
+                  color: root.clockFg
                   font.family: root.fontFamily
                   font.weight: Font.Bold
-                  font.pixelSize: 15
+                  font.pixelSize: 19
                   elide: Text.ElideRight
                   horizontalAlignment: Text.AlignLeft
                   verticalAlignment: Text.AlignVCenter
@@ -1154,9 +1228,12 @@ Scope {
                 width: parent.width
                 visible: NowPlaying.artist !== ""
                 text: NowPlaying.artist
-                color: Zenon.white
+                // Between the title's white and the album's muted, so the
+                // three rows read as a hierarchy rather than as two whites and
+                // a grey. The same ink the date is set in — see dateFg.
+                color: root.dateFg
                 font.family: root.fontFamily
-                font.pixelSize: 13
+                font.pixelSize: 16
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
               }
@@ -1166,7 +1243,7 @@ Scope {
                 text: NowPlaying.album
                 color: Zenon.muted
                 font.family: root.fontFamily
-                font.pixelSize: 12
+                font.pixelSize: 14
                 elide: Text.ElideRight
                 horizontalAlignment: Text.AlignLeft
               }
@@ -1190,8 +1267,35 @@ Scope {
             anchors.bottom: parent.bottom
             spacing: 12
 
-            Item {
+            // The clock and the uptime as one right-aligned pair, the same way
+            // the centred layout treats them — this corner is the other place
+            // the time lives, and a reading that only appears in one of them
+            // is a reading you cannot rely on being there.
+            Row {
               anchors.right: parent.right
+              spacing: 12
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.uptimeText !== ""
+                text: root.uptimeText
+                color: root.clockFg
+                font.family: Zenon.clockFamily
+                font.weight: Font.Bold
+                font.pointSize: root.clockSize
+              }
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: root.uptimeText !== ""
+                text: root.uptimeSep
+                color: root.clockFg
+                font.family: root.fontFamily
+                font.pixelSize: root.sepSize
+              }
+
+            Item {
+              anchors.verticalCenter: parent.verticalCenter
               width: Math.max(ghostR.implicitWidth, timeR.implicitWidth)
               height: timeR.implicitHeight
               Text {
@@ -1217,6 +1321,7 @@ Scope {
                 horizontalAlignment: Text.AlignRight
               }
             }
+            }
 
             Text {
               anchors.right: parent.right
@@ -1231,6 +1336,91 @@ Scope {
         }
       }
     }
+  }
+
+  // ── HOW LONG THIS MACHINE HAS BEEN UP ─────────────────────────────────
+  // Beside the time, because the two answer the same shape of question and
+  // the lock screen is where you most often want the second one: you came
+  // back to a machine and the first thing worth knowing is whether it is the
+  // one you left.
+  //
+  // From /proc/uptime rather than `uptime -p`, which says "up 3 days, 4 hours,
+  // 12 minutes" — a sentence, next to a seven-segment clock. Two units is as
+  // much as anyone reads off a glance.
+  property string uptimeText: ""
+  // The mark between the two readings. Dimmed to the unlit-segment ink, so it
+  // separates without competing with either number.
+  readonly property string uptimeSep: "󱑼"
+  readonly property int sepSize: 20
+
+  // WRITTEN FOR A SEVEN-SEGMENT FACE, because that is the face it wears.
+  //
+  // DSEG7 has no "m" — seven segments cannot make one, and it comes out as an
+  // "n". So the unit is carried by a single letter the display CAN form, used
+  // as the separator between the two numbers rather than as a suffix after
+  // each: "3h41" and "2d07" instead of "3h 41m". It reads as a duration
+  // precisely because a clock never has a letter in the middle of it.
+  function formatUptime(secs) {
+    const s = Math.max(0, Math.floor(secs));
+    if (!isFinite(s)) return "";
+    const pad = (n) => (n < 10 ? "0" + n : String(n));
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return d + "d" + pad(h);
+    return h + "h" + pad(m);
+  }
+
+  Process {
+    id: uptimeProc
+    command: ["sh", "-c", "cut -d. -f1 /proc/uptime"]
+    stdout: StdioCollector {
+      id: uptimeOut
+      waitForEnd: true
+      onStreamFinished:
+        root.uptimeText = root.formatUptime(parseInt(String(uptimeOut.text).trim(), 10))
+    }
+  }
+
+  // True once `checking` has lasted long enough to be worth drawing — see the
+  // ripple. Cleared the moment the phase moves on, so a refusal followed by a
+  // second attempt starts the wait over rather than showing the rings at once.
+  property bool rippleDue: false
+
+  Timer {
+    id: rippleDelay
+    interval: 250
+    onTriggered: root.rippleDue = (root.phase === "checking")
+  }
+
+  Connections {
+    target: root
+    function onPhaseChanged() {
+      if (root.phase === "checking") {
+        root.rippleDue = false;
+        rippleDelay.restart();
+      } else {
+        rippleDelay.stop();
+        root.rippleDue = false;
+      }
+    }
+  }
+
+  // Only while the lock is up, and only once a minute — it is measured in
+  // hours and nothing on this surface is watching the seconds.
+  // Driven by a plain property that lock() and release() set, NOT by a
+  // binding on sessionLock.locked. That binding evaluated false and never
+  // moved — the surface's own lock flag does not notify this far out — so the
+  // timer never started and the reading was never taken. A bool this file
+  // owns and writes is the one thing certain to report a change.
+  property bool pollUptime: false
+
+  Timer {
+    interval: 60000
+    repeat: true
+    triggeredOnStart: true
+    running: root.pollUptime
+    onTriggered: uptimeProc.running = true
   }
 
   SystemClock {

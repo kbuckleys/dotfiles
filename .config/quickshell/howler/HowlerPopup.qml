@@ -55,7 +55,7 @@ PanelWindow {
 
   property var statusbar: null
 
-  readonly property string face: "JetBrainsMono Nerd Font Propo"
+  readonly property string face: Zenon.face
 
   // While the pill is still growing into this layer, the panel is scaled down
   // to the pill's live size — and a radius scales with it. Halfway through, an
@@ -237,20 +237,26 @@ PanelWindow {
 
   Item {
     id: panel
-    width: 800
+    width: Zenon.layerWidth(800)
     height: popup.calcHeight()
     // Zenon.slow is the pill's own height easing in shell.qml
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }

@@ -68,7 +68,8 @@ PanelWindow {
   // once per frame for the length of the ease. That is a resize storm, and no
   // amount of easing makes a resize storm smooth — every other layer here
   // already uses a fixed surface with a moving panel inside it.
-  anchors { left: true; right: true; bottom: true }
+  anchors { left: true; right: true
+            bottom: !Zenon.barTop; top: Zenon.barTop }
   // contentWidth is the target; liveWidth is the value actually on screen.
   // The pill eases toward the same target on the same Zenon.slow curve,
   // so easing here — rather than snapping the window and letting the
@@ -134,7 +135,8 @@ property var statusbar: null
   // morphed cynosure was stacked a bar-height above the pill it is supposed to
   // be sitting inside. Cynosure puts it on the window rather than an inner
   // panel, but the number is the same one every layer uses.
-  margins.bottom: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+  margins.bottom: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+  margins.top: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
 
   Repeater {
     id: appLoader
@@ -493,7 +495,8 @@ property var statusbar: null
     width: popup.liveWidth
     height: parent.height
     anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: parent.bottom
+    anchors.top: Zenon.barTop ? parent.top : undefined
+    anchors.bottom: Zenon.barTop ? undefined : parent.bottom
   }
 
   Rectangle {
@@ -507,10 +510,11 @@ property var statusbar: null
     opacity: popup.morphMode ? 1 : popup.showFactor
     transform: Translate {
       id: spawnT
-      // the slide-up is the standalone entrance. Morphed, the pill has already
-      // travelled that distance and the panel IS the pill, so a second slide
-      // reads as the two coming apart.
-      y: popup.morphMode ? 0 : bg.height * (1 - popup.showFactor)
+      // the slide is the standalone entrance, out of whichever edge the bar
+      // is on. Morphed, the pill has already travelled that distance and the
+      // panel IS the pill, so a second slide reads as the two coming apart.
+      y: popup.morphMode ? 0
+        : (Zenon.barTop ? -1 : 1) * bg.height * (1 - popup.showFactor)
     }
 
     Item {
@@ -561,7 +565,7 @@ property var statusbar: null
               text: "\uF120"
               visible: inputBar.showInput
               color: Zenon.yellow
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 18
               verticalAlignment: Text.AlignVCenter
@@ -579,7 +583,7 @@ property var statusbar: null
 
               cursorDelegate: Item {}
               clip: true
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 18
               verticalAlignment: Text.AlignVCenter
@@ -678,7 +682,7 @@ property var statusbar: null
               anchors.centerIn: parent
               text: Cynosure.highlight(modelData.displayText, popup.query)
               color: index === popup.sel ? "#000000" : Zenon.yellow
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 16
               textFormat: Text.RichText
@@ -723,7 +727,7 @@ property var statusbar: null
             anchors.rightMargin: 12
             text: popup.query
             color: Zenon.yellow
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.weight: Font.Bold
             font.pixelSize: 16
             horizontalAlignment: Text.AlignHCenter
@@ -777,7 +781,7 @@ property var statusbar: null
               anchors.centerIn: parent
               text: modelData.label
               color: index === popup.sel ? "#000000" : Zenon.yellow
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: Font.Bold
               font.pixelSize: 16
             }

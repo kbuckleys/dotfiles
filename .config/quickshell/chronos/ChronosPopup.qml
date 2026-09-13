@@ -59,7 +59,7 @@ PanelWindow {
 
   property var statusbar: null
 
-  readonly property string face: "JetBrainsMono Nerd Font Propo"
+  readonly property string face: Zenon.face
 
   // While the pill is still growing into this layer, the panel is scaled down
   // to the pill's live size — and a radius scales with it. Halfway through, an
@@ -422,19 +422,25 @@ PanelWindow {
 
   Item {
     id: panel
-    width: popup.panelWidth
+    width: Zenon.layerWidth(popup.panelWidth)
     height: popup.calcHeight()
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -713,8 +719,13 @@ PanelWindow {
               }
               Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: Weather.loading ? "fetching the forecast…"
-                  : (Weather.error !== "" ? Weather.error : "no forecast yet")
+                // Switched off says so. An empty pane that only ever offers
+                // "try again" would be blaming the network for a choice made
+                // in the settings panel, and the button below would go on
+                // failing silently for as long as it was pressed.
+                text: Weather.disabled ? "the forecast is switched off"
+                  : (Weather.loading ? "fetching the forecast…"
+                  : (Weather.error !== "" ? Weather.error : "no forecast yet"))
                 color: Zenon.muted
                 font.family: popup.face
                 font.weight: Font.Bold
@@ -723,6 +734,7 @@ PanelWindow {
               PillButton {
                 anchors.horizontalCenter: parent.horizontalCenter
                 glyph: Wx.icon("refresh")
+                visible: !Weather.disabled
                 label: Weather.located ? "try again" : "find me"
                 accent: Zenon.cyan
                 dimmed: Weather.loading

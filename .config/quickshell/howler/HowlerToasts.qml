@@ -13,6 +13,7 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Widgets
 import "../morpheus"
+import "../oracle"
 import "../morpheus/helpers.js" as Helpers
 import "howler.js" as Wolf
 
@@ -26,17 +27,36 @@ PanelWindow {
   color: "transparent"
   exclusionMode: ExclusionMode.Ignore
 
-  // mako: anchor=bottom-center. Anchoring both sides and centring the column
+  // mako: anchor=bottom-center. Anchoring both sides and placing the column
   // inside, rather than leaving them unanchored: an unanchored axis is not
   // centred by the compositor, it is pinned to an edge — hyprland put the
   // whole stack flush against the right of the screen.
-  anchors { left: true; right: true; bottom: true }
+  //
+  // WHICH CORNER it sits in is a setting now — both axes, not just the end.
+  // The surface still spans the whole screen either way; only the column
+  // inside it moves, so nothing about the toasts' own sizing changes with it.
+  readonly property string corner: Oracle.notifCorner(Zenon.barTop)
+  readonly property bool atTop: toasts.corner.indexOf("top") === 0
+  readonly property string side: toasts.corner.split("-")[1]
+
+  // Clearing the PILL is only owed on the edge the pill is actually on. Sent
+  // to the opposite edge the stack has nothing to clear, and the lift there
+  // is just the screen clearance every layer keeps.
+  readonly property bool onBarEdge: toasts.atTop === Zenon.barTop
+  readonly property real lift: (toasts.onBarEdge
+    ? Zenon.edgeLift(false, toasts.screen, toasts.statusbar)
+    : Zenon.padScreen) + Howler.outerMargin
+  // mako: anchor=bottom-center, but the bar can be at the top now and the
+  // stack belongs beside it — a column of toasts at the far end of the screen
+  // from the thing that counts them reads as a different application's.
+  anchors { left: true; right: true
+            bottom: !toasts.atTop; top: toasts.atTop }
   // mako's outer-margin bottom was measured from the screen edge, but the
   // pill lives there now, so the same 20px is measured from the pill's top
-  // instead — off the pill's monitor bottomLift is just the screen clearance
+  // instead — off the pill's monitor edgeLift is just the screen clearance
   // and the gap lands where mako put it.
-  margins.bottom: Zenon.bottomLift(false, toasts.screen, toasts.statusbar)
-    + Howler.outerMargin
+  margins.bottom: toasts.lift
+  margins.top: toasts.lift
 
   implicitHeight: Math.max(1, column.implicitHeight)
 
@@ -60,7 +80,12 @@ PanelWindow {
     // No fixed width any more. Each toast sizes to its own text, and the
     // column takes the width of the widest — so a stack of mixed widths stays
     // centred on the screen rather than left-aligned against the widest one.
-    anchors.horizontalCenter: parent.horizontalCenter
+    anchors.horizontalCenter: toasts.side === "centre"
+      ? parent.horizontalCenter : undefined
+    anchors.left: toasts.side === "left" ? parent.left : undefined
+    anchors.right: toasts.side === "right" ? parent.right : undefined
+    anchors.leftMargin: Howler.outerMargin
+    anchors.rightMargin: Howler.outerMargin
     // mako: margin=2 between notifications
     spacing: Howler.margin
 
@@ -305,7 +330,7 @@ PanelWindow {
     }
     // The volume OSD sits below the toasts, so a stack that is already up
     // rides above it instead of being covered by it.
-    HowlerOsd { id: osd }
+    HowlerOsd { id: osd; atTop: toasts.atTop }
 
   }
 }

@@ -23,6 +23,11 @@ import "../morpheus"
 Item {
   id: osd
 
+  // Which edge of the toast stack this sits at. Handed in rather than read
+  // from Zenon.barTop: the toasts can be sent to the opposite edge from the
+  // bar, and this lives inside their window.
+  property bool atTop: Zenon.barTop
+
   property bool active: false
 
   readonly property var sink: Volume.sink
@@ -69,12 +74,18 @@ Item {
   Rectangle {
     id: body
     anchors.horizontalCenter: parent.horizontalCenter
-    anchors.bottom: parent.bottom
+    // At the end of the stack nearest the edge it is anchored to, so it is
+    // the first thing you meet coming off that edge whichever way round the
+    // toasts are. NOT read from Zenon.barTop directly: the toasts can be
+    // sent to the opposite edge from the bar, and this lives inside their
+    // window — reading the bar would put it at the far end of its own stack.
+    anchors.top: osd.atTop ? parent.top : undefined
+    anchors.bottom: osd.atTop ? undefined : parent.bottom
     width: 240
     height: 40
     radius: 12
     color: Zenon.panelBgDeep
-    border.color: Zenon.surface
+    border.color: Zenon.surfaceBorder
     border.width: 1
     opacity: osd.active ? 1 : 0
     Behavior on opacity {

@@ -69,7 +69,7 @@ PanelWindow {
   property var statusbar: null
 
   readonly property color bgColor: Zenon.layerBg
-  readonly property color borderColor: Zenon.surface
+  readonly property color borderColor: Zenon.surfaceBorder
   readonly property color selColor: Zenon.selBg
   readonly property color msgColor: Zenon.headBg
   readonly property color msgBorder: Zenon.msgBorder
@@ -102,7 +102,7 @@ PanelWindow {
 
   TextMetrics {
     id: textMetrics
-    font.family: "JetBrainsMono Nerd Font Propo"
+    font.family: Zenon.face
     font.pixelSize: 16
     font.weight: 600
     text: "M"
@@ -397,21 +397,27 @@ function onThumbsDone() {
 
   Item {
     id: panel
-    width: 1000
+    width: Zenon.layerWidth(1000)
     height: popup.bodyH
     // Zenon.slow is the pill's own height easing in shell.qml; if these drift
     // apart the panel visibly detaches from its background mid-resize
     Behavior on height { NumberAnimation { duration: Zenon.slow; easing.type: Zenon.ease } }
+    // Either edge. A layer opens out of the pill, so it has to be on the
+    // same one — anchored to whichever it is and given the same lift, with
+    // the unused anchor left undefined so the two can never both apply.
     anchors {
       horizontalCenter: parent.horizontalCenter
-      bottom: parent.bottom
-      bottomMargin: Zenon.bottomLift(popup.morphMode, popup.screen, popup.statusbar)
+      top: Zenon.barTop ? parent.top : undefined
+      bottom: Zenon.barTop ? undefined : parent.bottom
+      topMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
+      bottomMargin: Zenon.edgeLift(popup.morphMode, popup.screen, popup.statusbar)
     }
     z: 1
     opacity: popup.contentFade
     transform: Scale {
       origin.x: panel.width / 2
-      origin.y: panel.height
+      // grows out of the edge the bar is on, which is the edge it came from
+      origin.y: Zenon.barTop ? 0 : panel.height
       xScale: popup.panelX
       yScale: popup.panelY
     }
@@ -459,7 +465,7 @@ function onThumbsDone() {
             anchors.centerIn: parent
             text: "No clipboard entries"
             color: popup.hintColor
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.weight: 600
             font.pixelSize: 13
             visible: popup.shown && !popup.hasText && !popup.hasImg
@@ -469,7 +475,7 @@ function onThumbsDone() {
             anchors.centerIn: parent
             text: "No matches found"
             color: popup.hintColor
-            font.family: "JetBrainsMono Nerd Font Propo"
+            font.family: Zenon.face
             font.weight: 600
             font.pixelSize: 15
             visible: popup.shown && popup.mode === "text" && popup.rows.length === 0 && popup.hasText
@@ -512,7 +518,7 @@ function onThumbsDone() {
                 text: popup.cellText(modelData.preview)
                 color: popup.fgColor
                 textFormat: Text.RichText
-                font.family: "JetBrainsMono Nerd Font Propo"
+                font.family: Zenon.face
                 font.weight: 600
                 font.pixelSize: 16
                 clip: true
@@ -616,7 +622,7 @@ function onThumbsDone() {
               text: modelData
               color: popup.hintColor
               textFormat: Text.RichText
-              font.family: "JetBrainsMono Nerd Font Propo"
+              font.family: Zenon.face
               font.weight: 600
               font.pixelSize: 14
               verticalAlignment: Text.AlignVCenter
