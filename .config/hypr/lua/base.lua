@@ -11,6 +11,7 @@ hl.monitor({ output = "HDMI-A-1",  mode = "1920x1080@100",  position = "auto", t
 -- Nvidia cache limit set to 20 GB
 hl.env("__GL_SHADER_DISK_CACHE_SIZE", "21474836480")
 hl.env("__GL_SHADER_DISK_CACHE_SKIP_CLEANUP", "1")
+hl.env("QSG_RENDER_LOOP", "threaded")
 
 -- CURSOR
 hl.env("HYPRCURSOR_THEME", "cz-Viator-Black-Hourglass")
@@ -77,12 +78,12 @@ hl.config({
             popups = true,
 		},
 		shadow = {
-            range = 200,
-            render_power = 1,
-            offset = { 0, 20 },
-            scale = 0.9,
-            color = "rgba(0,0,0,0.6)",
-            color_inactive = "rgba(0,0,0,0.4)",
+            range = 70,
+            render_power = 2,
+            offset = { 0, 10 },
+            scale = 1.0,
+            color = "rgba(0,0,0,0.56)",
+            color_inactive = "rgba(0,0,0,0.37)",
 		},
 	},
 
