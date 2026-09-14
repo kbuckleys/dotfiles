@@ -78,12 +78,12 @@ hl.config({
             popups = true,
 		},
 		shadow = {
-            range = 70,
+            range = 56,
             render_power = 2,
-            offset = { 0, 10 },
+            offset = { 0, 12 },
             scale = 1.0,
-            color = "rgba(0,0,0,0.56)",
-            color_inactive = "rgba(0,0,0,0.37)",
+            color = "rgba(0,0,0,0.44)",
+            color_inactive = "rgba(0,0,0,0.29)",
 		},
 	},
 
