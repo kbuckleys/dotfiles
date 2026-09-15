@@ -26,6 +26,7 @@ import "socordia"
 import "picasso"
 import "chronos"
 import "icarus"
+import "clio"
 import "terminus"
 import "oracle"
 
@@ -41,6 +42,19 @@ ShellRoot {
   PicassoDaemon { }
   IcarusPopup { id: icarus; screen: root.focusedScreen }
   IcarusDesktop { id: icarusDesktop; popup: icarus }
+
+  // The notes left on the desktop. Not a morph layer and not on the pill: a
+  // note is a thing you put down and walk away from, so it has no opener to
+  // become and nothing to open out of.
+  //
+  // DECLARED AFTER ICARUS' DESKTOP, and that is load-bearing. Both sit on the
+  // bottom layer and icarus' catcher masks the WHOLE screen — it is what
+  // turns a click on empty desktop into the menu. Within one layer the later
+  // surface stacks on top, so declared first the notes sat underneath it and
+  // every click aimed at one opened the menu instead: no press, no hover,
+  // nothing. A note has to be above the thing whose whole job is catching
+  // what misses everything else.
+  ClioBoard { }
 
   // The file manager. NOT in the morph ring and not in the height switch
   // below: it is a real xdg-toplevel, so hyprland owns its size and position
