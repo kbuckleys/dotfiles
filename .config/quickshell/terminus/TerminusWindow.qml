@@ -11279,17 +11279,22 @@ FloatingWindow {
           if (event.key === Qt.Key_Space) {
             root.toggleMark(); root.moveSel(1); return;
           }
-          // j and k, and h and l for the trail — the same four the listing
-          // behind it answers to, because the cursor being driven is its own.
-          if (event.key === Qt.Key_Down || event.text === "j") {
+          // ── FOUR WAYS TO SAY "THE NEXT ONE" ─────────────────────────
+          // j/k and the vertical arrows because that is how the listing under
+          // it moves, and h/l and the horizontal arrows because this is a
+          // PICTURE VIEWER and left-right is what a hand reaches for in one.
+          //
+          // h and l do NOT walk the trail here, which they do everywhere else.
+          // The trail is about directories and there is no directory on screen
+          // — closing the overlay to jump somewhere else is not a thing anyone
+          // reaches for mid-flick through a folder of photographs.
+          if (event.key === Qt.Key_Down || event.key === Qt.Key_Right
+              || event.text === "j" || event.text === "l") {
             root.moveSel(1); return;
           }
-          if (event.key === Qt.Key_Up || event.text === "k") {
+          if (event.key === Qt.Key_Up || event.key === Qt.Key_Left
+              || event.text === "k" || event.text === "h") {
             root.moveSel(-1); return;
-          }
-          if (event.text === "h") { root.looking = false; root.back(); return; }
-          if (event.text === "l") {
-            root.looking = false; root.forward(); return;
           }
           return;
         }
@@ -14603,6 +14608,33 @@ FloatingWindow {
       readonly property real shotH:
         Math.round(lookNat.implicitHeight * look.fitScale)
 
+      // ── THE SHAPE IT HAD WHILE THE NEXT ONE IS DECODING ───────────────
+      // Stepping to the next picture clears the old one instantly and the new
+      // one arrives a frame or two later. In between, shotW is 0, the panel
+      // has nothing to be the size of, and it fell back to the size of a card
+      // with no picture in it — so every step went small, then big. With the
+      // resize eased that was a shrink and a grow; without it, a flash. Either
+      // way it reads as the panel closing and reopening, which is the one
+      // thing it is not doing.
+      //
+      // So the last good size is kept and worn through the gap. The panel
+      // changes size once, when there is something to change it for.
+      property real heldW: 0
+      property real heldH: 0
+      function holdSize() {
+        if (look.shotW > 0 && look.shotH > 0) {
+          look.heldW = look.shotW;
+          look.heldH = look.shotH;
+        }
+      }
+      onShotWChanged: look.holdSize()
+      onShotHChanged: look.holdSize()
+
+      // The row WANTS a picture and has not got one yet — as against a text
+      // file, which never will and should collapse to its own size at once.
+      readonly property bool pending: look.src !== ""
+        && lookShot.status !== Image.Ready && lookShot.status !== Image.Error
+
       // ── ASKED OF THE FILE, NOT OF THE PREVIEW PANE ───────────────────
       // This read root.previewKind, which is the miller column's state — and
       // the miller column only exists in the columns view. In a list or a
@@ -14658,23 +14690,28 @@ FloatingWindow {
         // shown, so the card keeps a fixed, modest height for that case.
         readonly property real emptyH: 120
 
-        width: lookShot.visible ? look.shotW : lookFrame.textW
-        height: look.capH + (lookShot.visible ? look.shotH
-          : (root.previewText !== ""
-             ? Math.min(lookCol.implicitHeight + 32, look.height * 0.8)
-             : lookFrame.emptyH))
+        // Held through the decode — see look.heldW — so a step between two
+        // pictures is one change of size rather than a collapse and a recovery.
+        readonly property bool holding: look.pending && look.heldW > 0
 
-        // A picture arrives Ready a frame or two after the panel opens, and
-        // the panel is a different size once it does. Animated, so that is a
-        // resize rather than a jump — and stepping from one file to the next
-        // without leaving quick look becomes one panel changing shape instead
-        // of two panels.
-        Behavior on width {
-          NumberAnimation { duration: Zenon.fast; easing.type: Zenon.travelEase }
-        }
-        Behavior on height {
-          NumberAnimation { duration: Zenon.fast; easing.type: Zenon.travelEase }
-        }
+        width: lookShot.visible ? look.shotW
+          : (lookFrame.holding ? look.heldW : lookFrame.textW)
+        height: look.capH + (lookShot.visible ? look.shotH
+          : (lookFrame.holding ? look.heldH
+             : (root.previewText !== ""
+                ? Math.min(lookCol.implicitHeight + 32, look.height * 0.8)
+                : lookFrame.emptyH)))
+
+        // ── NO EASING ON THE SIZE ─────────────────────────────────────
+        // The panel used to ease between sizes, on the reasoning that stepping
+        // files should be one panel changing shape rather than two panels.
+        // With the size now HELD across the decode there is nothing to ease:
+        // the change happens once, when the new picture is already in hand,
+        // and easing it only delays the picture you asked for.
+        //
+        // Which leaves this overlay animating on exactly two events — opening
+        // and closing. Everything in between is instant, which is what a
+        // viewer you flick through should be.
 
         // THE ARRIVAL EVERY OTHER CARD HAS AND THIS ONE DID NOT. It appeared
         // at full size the instant the scrim began to fade, which reads as a
@@ -14759,7 +14796,10 @@ FloatingWindow {
           anchors.left: parent.left
           anchors.right: parent.right
           anchors.bottom: lookCap.top
-          visible: !lookShot.visible && root.previewText === ""
+          // NOT WHILE ONE IS ON ITS WAY. "no preview available" is an answer
+          // about the file, and during a decode there is no answer yet.
+          visible: !lookShot.visible && !look.pending
+                   && root.previewText === ""
           horizontalAlignment: Text.AlignHCenter
           verticalAlignment: Text.AlignVCenter
           text: "no preview available"
@@ -14790,15 +14830,55 @@ FloatingWindow {
             color: Zenon.msgBorder
           }
 
+          // ── THE NAME LEFT, THE KEYS RIGHT ─────────────────────────
+          // Centred, the name moved every time you stepped to a file with a
+          // longer one — a title that shifts under the eye on every keypress,
+          // in the one place you are pressing a key repeatedly. Pinned left it
+          // starts in the same spot whatever it says, and the room it is not
+          // using is where the keys go.
           Text {
-            anchors.centerIn: parent
-            width: Math.min(implicitWidth, lookCap.width - 24)
+            id: lookName
+            anchors.left: parent.left
+            anchors.leftMargin: 14
+            anchors.right: lookKeys.left
+            anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
             elide: Text.ElideMiddle
             text: look.row ? look.row.name : ""
             color: Zenon.white
             font.family: Zenon.face
             font.weight: Font.Bold
             font.pixelSize: 15
+          }
+
+          // WHAT MOVES YOU, said on the bar rather than left to be discovered.
+          // Quick look has no footer of its own — the caption bar IS the
+          // chrome — so the hint lives beside the name it is about.
+          Row {
+            id: lookKeys
+            anchors.right: parent.right
+            anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 5
+
+            KeyChip {
+              anchors.verticalCenter: parent.verticalCenter
+              label: "h / l"
+              fontSize: 11
+            }
+            KeyChip {
+              anchors.verticalCenter: parent.verticalCenter
+              label: "\u2190 / \u2192"
+              fontSize: 11
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              leftPadding: 3
+              text: "prev / next"
+              color: Zenon.muted
+              font.family: Zenon.face
+              font.pixelSize: 12
+            }
           }
         }
       }
