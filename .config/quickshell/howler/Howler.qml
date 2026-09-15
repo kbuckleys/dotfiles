@@ -43,6 +43,12 @@ Singleton {
   // Since the last time the panel was opened. The bell reads this.
   property int unread: 0
 
+  // ── WHAT THIS SHELL SAYS TO ITSELF ──────────────────────────────────────
+  // The app name morpheus' UpdateModule announces under — see its notify-send
+  // call, which passes exactly this to -a. Named here rather than matched
+  // inline so the two ends of the arrangement can be found from either side.
+  readonly property string selfUpdateApp: "waybar-updates"
+
   // ── mako's config, as settings ──────────────────────────────────────────
   readonly property int maxVisible:   Oracle.notifMaxVisible
   readonly property bool iconsEnabled: Oracle.notifIcons
@@ -208,6 +214,17 @@ Singleton {
       // toasts and is then forgotten rather than filling the bell with a
       // playlist.
       if (row.mprisPlayer !== "" && !Oracle.notifTrackMusic) return;
+
+      // AND SO IS AN UPDATE COUNT, for the same reason and more strongly: this
+      // one is not an application talking to you, it is this shell talking to
+      // itself. The count is already on the bar and the full list is already
+      // in its tooltip, so the bell was keeping a running tally of something
+      // that is on screen anyway — and re-announcing it every time the number
+      // moved, which on a rolling distribution is most days.
+      //
+      // It still TOASTS. The arrival is worth saying once; it is the keeping
+      // that was wrong.
+      if (row.appName === root.selfUpdateApp) return;
 
       const h = root.history.slice();
       h.unshift(row);
