@@ -11279,22 +11279,36 @@ FloatingWindow {
           if (event.key === Qt.Key_Space) {
             root.toggleMark(); root.moveSel(1); return;
           }
-          // ── FOUR WAYS TO SAY "THE NEXT ONE" ─────────────────────────
-          // j/k and the vertical arrows because that is how the listing under
-          // it moves, and h/l and the horizontal arrows because this is a
-          // PICTURE VIEWER and left-right is what a hand reaches for in one.
+          // ── TWO AXES, TWO JOBS ──────────────────────────────────────
+          // ACROSS is the folder: h/l and the horizontal arrows step to the
+          // previous and next file, because this is a picture viewer and
+          // left-right is what a hand reaches for in one. They do NOT walk the
+          // trail here, which they do everywhere else — the trail is about
+          // directories and there is no directory on screen.
           //
-          // h and l do NOT walk the trail here, which they do everywhere else.
-          // The trail is about directories and there is no directory on screen
-          // — closing the overlay to jump somewhere else is not a thing anyone
-          // reaches for mid-flick through a folder of photographs.
-          if (event.key === Qt.Key_Down || event.key === Qt.Key_Right
-              || event.text === "j" || event.text === "l") {
+          // DOWN is the document: j/k and the vertical arrows scroll the text
+          // pane. Four keys all meaning "next file" was three of them wasted,
+          // and it left the one thing a long README actually needs — reading
+          // past the first screenful — with no key at all.
+          if (event.key === Qt.Key_Right || event.text === "l") {
             root.moveSel(1); return;
           }
-          if (event.key === Qt.Key_Up || event.key === Qt.Key_Left
-              || event.text === "k" || event.text === "h") {
+          if (event.key === Qt.Key_Left || event.text === "h") {
             root.moveSel(-1); return;
+          }
+          if (event.key === Qt.Key_Down || event.text === "j") {
+            look.scrollBy(1); return;
+          }
+          if (event.key === Qt.Key_Up || event.text === "k") {
+            look.scrollBy(-1); return;
+          }
+          if (event.key === Qt.Key_PageDown) { look.scrollBy(8); return; }
+          if (event.key === Qt.Key_PageUp) { look.scrollBy(-8); return; }
+          if (event.key === Qt.Key_Home) { lookScroll.contentY = 0; return; }
+          if (event.key === Qt.Key_End) {
+            lookScroll.contentY = Math.max(0,
+              lookScroll.contentHeight - lookScroll.height);
+            return;
           }
           return;
         }
@@ -14630,6 +14644,29 @@ FloatingWindow {
       onShotWChanged: look.holdSize()
       onShotHChanged: look.holdSize()
 
+      // ── READING THE THING, RATHER THAN LEAVING IT ─────────────────────
+      // Three lines a press, which is what a wheel notch moves and what the
+      // hand expects from an arrow key in a document. Clamped at both ends so
+      // holding a key at the bottom of a file does not wind contentY off into
+      // space and leave the view blank on the way back.
+      //
+      // Silently nothing when there is no text pane: over a picture there is
+      // nothing to scroll, and a key that quietly does nothing is better than
+      // one that does something else instead.
+      readonly property int scrollStep: 3 * 14 + 12
+
+      // Whether there is anything to scroll — a short file fits and its keys
+      // would do nothing, so the bar does not offer them.
+      readonly property bool scrollable: lookScroll.visible
+        && lookScroll.contentHeight > lookScroll.height
+
+      function scrollBy(n) {
+        if (!lookScroll.visible) return;
+        const max = Math.max(0, lookScroll.contentHeight - lookScroll.height);
+        lookScroll.contentY = Math.max(0,
+          Math.min(max, lookScroll.contentY + n * look.scrollStep));
+      }
+
       // The row WANTS a picture and has not got one yet — as against a text
       // file, which never will and should collapse to its own size at once.
       readonly property bool pending: look.src !== ""
@@ -14752,6 +14789,7 @@ FloatingWindow {
         // Everything that is not a picture: the text preview the pane already
         // read, or the name and the reason there is nothing to show.
         Flickable {
+          id: lookScroll
           anchors.top: parent.top
           anchors.left: parent.left
           anchors.right: parent.right
@@ -14874,7 +14912,34 @@ FloatingWindow {
             Text {
               anchors.verticalCenter: parent.verticalCenter
               leftPadding: 3
+              rightPadding: 8
               text: "prev / next"
+              color: Zenon.muted
+              font.family: Zenon.face
+              font.pixelSize: 12
+            }
+
+            // ── AND THE OTHER AXIS, ONLY WHEN IT HAS ONE ────────────────
+            // Shown for a document that is taller than its pane and nowhere
+            // else: over a picture there is nothing to scroll, and a hint for
+            // a key that does nothing is worse than no hint.
+            KeyChip {
+              anchors.verticalCenter: parent.verticalCenter
+              visible: look.scrollable
+              label: "j / k"
+              fontSize: 11
+            }
+            KeyChip {
+              anchors.verticalCenter: parent.verticalCenter
+              visible: look.scrollable
+              label: "\u2191 / \u2193"
+              fontSize: 11
+            }
+            Text {
+              anchors.verticalCenter: parent.verticalCenter
+              visible: look.scrollable
+              leftPadding: 3
+              text: "scroll"
               color: Zenon.muted
               font.family: Zenon.face
               font.pixelSize: 12
