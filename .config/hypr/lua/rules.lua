@@ -22,6 +22,20 @@ hl.window_rule({ match = { class = "^$" }, no_shadow = false })
 
 -- GLOBAL BLUR
 hl.layer_rule({ match = { namespace = ".*" }, blur = true, ignore_alpha = 0.5 })
+-- THE BAR ANIMATES ITSELF, SO HYPRLAND MUST NOT
+--
+-- morpheus' pill morphs into a panel by animating a rectangle inside a
+-- surface that snaps between two sizes once per morph. hyprland was playing
+-- the `layers` animation (speed 1, easeOutQuint = 100ms) over that snap,
+-- scaling the pill's whole buffer down and back inside the animated rect --
+-- glyphs and all, which is a thing QML cannot do and so could only have been
+-- the compositor. Two animators, two curves, two durations, one object.
+--
+-- The shell's own morph is 75ms and owns every pixel of this surface, so
+-- there is nothing here for the compositor to add. `morpheus-bar` is the
+-- namespace shell.qml gives the pill precisely so this rule can name it
+-- without touching the other quickshell layers, which still animate.
+hl.layer_rule({ match = { namespace = "morpheus-bar" }, animation = "none" })
 
 -- SPECIAL WORKSPACE
 hl.workspace_rule({ workspace = "special:special", gaps_out = 30 })
