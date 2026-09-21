@@ -28,7 +28,6 @@ hl.bind("SUPER + SHIFT + J",  hl.dsp.exec_cmd("qs ipc call Ideo nerd"))
 hl.bind("SUPER + V",          hl.dsp.exec_cmd("qs ipc call Calypso toggle"))
 hl.bind("SUPER + K",          hl.dsp.exec_cmd("qs ipc call Zeus toggle"))
 hl.bind("SUPER + D",          hl.dsp.exec_cmd("qs ipc call Lexi toggle"))
-hl.bind("SUPER + SHIFT + D",  hl.dsp.exec_cmd("qs ipc call Lexi translate"))
 hl.bind("SUPER + SHIFT + B",  hl.dsp.exec_cmd("qs ipc call Picasso toggle"))
 
 -- spoot
