@@ -52,8 +52,8 @@ hl.config({
 	general = {
         layout = "scrolling",
 		col = {
-			inactive_border = "#A3A9BD4d",
-			active_border = "#A3A9BD99",
+			inactive_border = "#9BBFBF1A",
+			active_border = "#9BBFBF33",
 		},
 		gaps_out = 4,
 		gaps_in = -1,

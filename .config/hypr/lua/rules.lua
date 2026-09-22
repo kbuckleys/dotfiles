@@ -13,8 +13,9 @@ hl.window_rule({ match = { class = "swayimg" },                                 
 hl.window_rule({ match = { class = "mpv" },                                        float = true })
 
 -- BORDERS
-hl.window_rule({ match = { fullscreen = true },  border_color = "#fab38799", border_size = 1, rounding = 5 })
-hl.window_rule({ match = { float = true },       border_color = "#A3A9BD99", border_size = 1, rounding = 5 })
+-- the unfocused value — see general.col in base.lua
+hl.window_rule({ match = { fullscreen = true },  rounding = 5 })
+hl.window_rule({ match = { float = true },       rounding = 5 })
 
 -- DISABLE SHADOWS FOR TILES
 hl.window_rule({ match = { float = false }, no_shadow = true })
