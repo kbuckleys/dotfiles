@@ -84,13 +84,18 @@ hl.config({
             -- terminus' popup menu cast a haze.
             popups_ignorealpha = 0.5,
 		},
+		-- The shell's menu shadow (quickshell's Zenon.menuShadow*), cast by
+		-- windows too: black at 0.48, reaching 70px (20 at full strength, then
+		-- a 50px falloff), dropped 10px. Hyprland has no separate spread, so
+		-- the reach is one range with power 2's gradual curve for the fade.
+		-- Focused or not, the same shadow.
 		shadow = {
-            range = 56,
+            range = 70,
             render_power = 2,
-            offset = { 0, 12 },
+            offset = { 0, 10 },
             scale = 1.0,
-            color = "rgba(0,0,0,0.44)",
-            color_inactive = "rgba(0,0,0,0.29)",
+            color = "rgba(0,0,0,0.48)",
+            color_inactive = "rgba(0,0,0,0.48)",
 		},
 	},
 
