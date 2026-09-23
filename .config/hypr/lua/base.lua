@@ -77,19 +77,8 @@ hl.config({
             passes = 2,
             special = true,
             popups = true,
-            -- Match the layer rule's ignore_alpha (see rules.lua).
-            -- Popups defaulted to 0.2, so a menu's drop shadow — which
-            -- is translucent by definition — blurred the desktop
-            -- through itself instead of darkening it. Layers already
-            -- sit at 0.5, which is why icarus' menus cast a shadow and
-            -- terminus' popup menu cast a haze.
             popups_ignorealpha = 0.5,
 		},
-		-- The shell's menu shadow (quickshell's Zenon.menuShadow*), cast by
-		-- windows too: black at 0.48, reaching 70px (20 at full strength, then
-		-- a 50px falloff), dropped 10px. Hyprland has no separate spread, so
-		-- the reach is one range with power 2's gradual curve for the fade.
-		-- Focused or not, the same shadow.
 		shadow = {
             range = 70,
             render_power = 2,
