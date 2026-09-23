@@ -11,8 +11,6 @@ local web = "firefox"
 hl.bind("SUPER + SHIFT + ESCAPE",  hl.dsp.exec_cmd("hyprshutdown"), { locked = true })
 hl.bind("SUPER + SHIFT + S",       hl.dsp.exec_cmd(term .. " -T sysmon btop"))
 hl.bind("SUPER + RETURN",          hl.dsp.exec_cmd(term))
-hl.bind("SUPER + P",               hl.dsp.exec_cmd(term .. " -T ZENU ~/.config/scripts/ZENU.lua"))
-hl.bind("SUPER + SHIFT + P",       hl.dsp.exec_cmd(term .. " -T ZENU ~/.config/scripts/ZENU.lua update"))
 hl.bind("SUPER + CONTROL + P",     hl.dsp.exec_cmd("hyprpicker -a"))
 hl.bind("SUPER + B",               hl.dsp.exec_cmd(web))
 
@@ -29,6 +27,8 @@ hl.bind("SUPER + V",          hl.dsp.exec_cmd("qs ipc call Calypso toggle"))
 hl.bind("SUPER + K",          hl.dsp.exec_cmd("qs ipc call Zeus toggle"))
 hl.bind("SUPER + D",          hl.dsp.exec_cmd("qs ipc call Lexi toggle"))
 hl.bind("SUPER + SHIFT + B",  hl.dsp.exec_cmd("qs ipc call Picasso toggle"))
+hl.bind("SUPER + P",          hl.dsp.exec_cmd("qs ipc call Ceres toggleWindow packages"))
+hl.bind("SUPER + SHIFT + P",  hl.dsp.exec_cmd("qs ipc call Ceres toggleWindow updates"))
 
 -- spoot
 hl.bind("SUPER + M",          hl.dsp.exec_cmd("~/Projects/spoot/bin/spoot"))
