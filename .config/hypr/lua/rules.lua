@@ -12,11 +12,6 @@ hl.window_rule({ match = { class = "kitty",title = "ZENU" },                    
 hl.window_rule({ match = { class = "swayimg" },                                    float = true })
 hl.window_rule({ match = { class = "mpv" },                                        float = true })
 
--- BORDERS
--- the unfocused value — see general.col in base.lua
-hl.window_rule({ match = { fullscreen = true },  rounding = 5 })
-hl.window_rule({ match = { float = true },       rounding = 5 })
-
 -- DISABLE SHADOWS FOR TILES
 hl.window_rule({ match = { float = false }, no_shadow = true })
 hl.window_rule({ match = { class = "^$" }, no_shadow = false })
